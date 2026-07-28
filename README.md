@@ -10,7 +10,7 @@ Minimal MCP server for a single-owner production deployment, using OAuth authori
 ## Security model
 
 - MCP access requires a signed, audience-bound access token with `mcp:tools`.
-- The built-in `grok` client uses the exact redirect URI configured in `GROK_REDIRECT_URI`.
+- The built-in `grok` client uses Grok's fixed callback URL.
 - The resource owner approves connections with `OAUTH_AUTHORIZATION_PASSWORD`.
 - Authorization codes expire after five minutes and are consumed atomically in Redis-compatible KV.
 - The OAuth client ID is fixed to `grok`; dynamic client registration is not exposed.
@@ -19,7 +19,7 @@ This is a single-owner authorization server. Use an external identity provider i
 
 ## Deploy to Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework&env=OAUTH_SECRET%2COAUTH_AUTHORIZATION_PASSWORD%2CGROK_REDIRECT_URI&envDescription=OAuth%20signing%20secret%2C%20authorization%20password%2C%20and%20the%20exact%20Grok%20callback%20URL&envLink=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework%2Fblob%2Fmain%2Fdocs%2Fconfiguration.md&project-name=oauth-mcp-framework&repository-name=oauth-mcp-framework)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework&env=OAUTH_SECRET%2COAUTH_AUTHORIZATION_PASSWORD&envDescription=OAuth%20signing%20secret%20and%20authorization%20password&envLink=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework%2Fblob%2Fmain%2Fdocs%2Fconfiguration.md&project-name=oauth-mcp-framework&repository-name=oauth-mcp-framework)
 
 The deployment form asks for:
 
@@ -27,7 +27,6 @@ The deployment form asks for:
 |---|---|
 | `OAUTH_SECRET` | Independent random value with at least 32 characters |
 | `OAUTH_AUTHORIZATION_PASSWORD` | Independent authorization password with at least 12 characters |
-| `GROK_REDIRECT_URI` | Exact callback URL used by the Grok connector |
 
 Generate the two secrets locally:
 

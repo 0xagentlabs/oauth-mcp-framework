@@ -23,10 +23,11 @@ export const SCOPES = ["mcp:tools", "mcp:read", "mcp:write", "openid"];
 
 type OAuthClient = { client_id: string; redirect_uris: string[]; client_name?: string };
 
-function grokClient(): OAuthClient | undefined {
-  const redirectUri = process.env.GROK_REDIRECT_URI;
-  return redirectUri ? { client_id: "grok", client_name: "Grok", redirect_uris: [redirectUri] } : undefined;
-}
+const GROK_CLIENT: OAuthClient = {
+  client_id: "grok",
+  client_name: "Grok",
+  redirect_uris: ["https://grok.com/connectors-oauth-exchange-code/"],
+};
 
 export async function redis(command: string[]): Promise<unknown> {
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -45,10 +46,10 @@ export async function redis(command: string[]): Promise<unknown> {
 }
 
 export async function validateClient(clientId: string, redirectUri: string): Promise<OAuthClient> {
-  const client = grokClient();
-  if (!client || !client.redirect_uris.includes(redirectUri)) throw new Error("invalid_client");
-  if (clientId !== client.client_id) throw new Error("invalid_client");
-  return client;
+  if (clientId !== GROK_CLIENT.client_id || !GROK_CLIENT.redirect_uris.includes(redirectUri)) {
+    throw new Error("invalid_client");
+  }
+  return GROK_CLIENT;
 }
 
 export function validateScope(scope: string): string {

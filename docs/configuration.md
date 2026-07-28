@@ -8,7 +8,7 @@
 
 - 管理员使用统一授权口令批准连接。
 - MCP 客户端使用 OAuth Authorization Code + S256 PKCE 获取 Access Token。
-- OAuth 客户端固定为 `grok`，回调地址必须通过 `GROK_REDIRECT_URI` 精确配置。
+- OAuth 客户端固定为 `grok`，并内置 Grok 官方回调地址。
 - 授权码有效期为 5 分钟，只能兑换一次。
 - Access Token 有效期为 1 小时。
 - 授权口令连续尝试限制为每个来源地址 10 分钟内 10 次。
@@ -35,7 +35,6 @@ Vercel 自动推导服务域名，Upstash 集成自动注入 KV 变量时，只�
 ```dotenv
 OAUTH_SECRET=至少32字符的独立随机密钥
 OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
-GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 ```
 
 其中：
@@ -44,7 +43,7 @@ GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 - Client Secret 留空。
 - `MCP_RESOURCE_URL` 由 Vercel 自动推导，不用配置。
 - Redis 连接变量由绑定的 Upstash 集成注入，不用重复配置；项目同时识别 `KV_*` 和 `UPSTASH_REDIS_*` 命名。
-- `GROK_REDIRECT_URI` 不是密钥，只用于精确验证授权回调地址。
+- Grok Client ID 和官方回调地址均已内置，不用配置。
 
 生成两个独立随机值：
 
@@ -58,7 +57,6 @@ openssl rand -base64 24
 ```dotenv
 OAUTH_SECRET=至少32字符的独立随机密钥
 OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
-GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 KV_REST_API_URL=https://your-kv-rest-endpoint
 KV_REST_API_TOKEN=your-kv-rest-token
 MCP_RESOURCE_URL=https://mcp.example.com
@@ -109,21 +107,16 @@ openssl rand -base64 48
 
 该值不会发送给 MCP 客户端，只提交到本服务的 `/oauth/authorize`。
 
-### `GROK_REDIRECT_URI`
+### Grok 客户端
 
-项目内置且只支持固定 OAuth 公共客户端：
+项目内置且只支持固定 OAuth 公共客户端和回调地址：
 
 ```json
 {
   "client_id": "grok",
-  "client_name": "Grok"
+  "client_name": "Grok",
+  "redirect_uri": "https://grok.com/connectors-oauth-exchange-code/"
 }
-```
-
-无需配置 Client ID。只需把 Grok 创建 Custom Connector 时实际使用的回调地址原样填入：
-
-```dotenv
-GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 ```
 
 注意：
@@ -167,11 +160,7 @@ npm ci
 cp .env.example .env.local
 ```
 
-本地开发仍需要可访问的开发 Redis。非生产开发默认地址已经是 `http://localhost:3000`，无需设置 `MCP_RESOURCE_URL`。配置 Grok 回调地址：
-
-```dotenv
-GROK_REDIRECT_URI=https://Grok提供的精确回调地址
-```
+本地开发仍需要可访问的开发 Redis。非生产开发默认地址已经是 `http://localhost:3000`，无需设置 `MCP_RESOURCE_URL`。
 
 ```bash
 npm run dev
@@ -189,10 +178,9 @@ curl http://localhost:3000/.well-known/oauth-protected-resource
 1. 将仓库导入 Vercel。
 2. 在 Storage/Marketplace 创建或绑定 Upstash Redis。
 3. 在 Project Settings → Environment Variables 配置本文全部必需变量。
-4. 设置 `GROK_REDIRECT_URI` 为 Grok 实际回调地址。
-5. 使用 Vercel 默认域名时不要配置 `MCP_RESOURCE_URL`。
-6. 部署。
-7. 如果之后绑定自定义域名，再将 `MCP_RESOURCE_URL` 设置为该域名并重新部署。
+4. 使用 Vercel 默认域名时不要配置 `MCP_RESOURCE_URL`。
+5. 部署。
+6. 如果之后绑定自定义域名，再将 `MCP_RESOURCE_URL` 设置为该域名并重新部署。
 
 部署前执行：
 
@@ -258,7 +246,7 @@ curl -i -H 'Authorization: Bearer demo-anything' https://你的域名/api/mcp
 
 ### `invalid_client`
 
-Client ID 不是 `grok`，或 `redirect_uri` 与 `GROK_REDIRECT_URI` 不完全一致。优先比较协议、端口、路径和末尾斜杠。
+Client ID 不是 `grok`，或 `redirect_uri` 不是内置的 `https://grok.com/connectors-oauth-exchange-code/`。末尾斜杠也必须一致。
 
 ### `invalid_scope`
 
@@ -303,4 +291,4 @@ MCP 入口当前只强制要求 `mcp:tools`。
 - 为生产、预发布和开发环境使用不同的 OAuth 密钥、授权口令和 KV。
 - 在部署平台开启 HTTPS、访问日志和错误告警。
 - 轮换 `OAUTH_SECRET` 前应接受现有 Token 全部失效。
-- 如需停止新授权，可移除 `GROK_REDIRECT_URI`；已经签发的 Token 会持续有效到最多 1 小时。
+- 如需停止新授权，可移除或轮换 `OAUTH_AUTHORIZATION_PASSWORD`；已经签发的 Token 会持续有效到最多 1 小时。

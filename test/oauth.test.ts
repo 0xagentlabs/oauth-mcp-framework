@@ -3,7 +3,6 @@ import test from "node:test";
 
 process.env.OAUTH_SECRET = "test-secret-that-is-longer-than-32-characters";
 process.env.OAUTH_AUTHORIZATION_PASSWORD = "correct-horse-battery-staple";
-process.env.GROK_REDIRECT_URI = "https://client.example/callback";
 process.env.KV_REST_API_URL = "https://kv.example";
 process.env.KV_REST_API_TOKEN = "test-token";
 
@@ -16,7 +15,7 @@ test("rejects unknown scopes and redirect URIs", async () => {
     /invalid_client/,
   );
   assert.equal(
-    (await oauth.validateClient("grok", "https://client.example/callback")).client_id,
+    (await oauth.validateClient("grok", "https://grok.com/connectors-oauth-exchange-code/")).client_id,
     "grok",
   );
 });
@@ -75,7 +74,7 @@ test("authorization code is consumed exactly once", async () => {
   try {
     const code = await oauth.createAuthCode({
       client_id: "grok",
-      redirect_uri: "https://client.example/callback",
+      redirect_uri: "https://grok.com/connectors-oauth-exchange-code/",
       code_challenge: "challenge",
       scope: "mcp:tools",
     });

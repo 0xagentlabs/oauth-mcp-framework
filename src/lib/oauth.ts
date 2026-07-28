@@ -14,7 +14,6 @@ function getIssuer() {
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL)
     return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  if (isProduction) throw new Error("MCP_RESOURCE_URL is required in production");
   return "http://localhost:3000";
 }
 
@@ -24,11 +23,9 @@ export const SCOPES = ["mcp:tools", "mcp:read", "mcp:write", "openid"];
 
 type OAuthClient = { client_id: string; redirect_uris: string[]; client_name?: string };
 
-function configuredClients(): OAuthClient[] {
-  if (!process.env.OAUTH_CLIENTS) return [];
-  const clients = JSON.parse(process.env.OAUTH_CLIENTS) as OAuthClient[];
-  if (!Array.isArray(clients)) throw new Error("OAUTH_CLIENTS must be a JSON array");
-  return clients;
+function grokClient(): OAuthClient | undefined {
+  const redirectUri = process.env.GROK_REDIRECT_URI;
+  return redirectUri ? { client_id: "grok", client_name: "Grok", redirect_uris: [redirectUri] } : undefined;
 }
 
 async function redis(command: string[]): Promise<unknown> {
@@ -47,25 +44,10 @@ async function redis(command: string[]): Promise<unknown> {
   return body.result;
 }
 
-export async function registerClient(client: OAuthClient): Promise<void> {
-  await redis(["SET", `oauth:client:${client.client_id}`, JSON.stringify(client)]);
-}
-
-export async function getClient(clientId: string): Promise<OAuthClient | undefined> {
-  const configured = configuredClients().find((client) => client.client_id === clientId);
-  if (configured) return configured;
-  try {
-    const value = await redis(["GET", `oauth:client:${clientId}`]);
-    return typeof value === "string" ? JSON.parse(value) as OAuthClient : undefined;
-  } catch {
-    if (isProduction) throw new Error("OAuth client store unavailable");
-    return undefined;
-  }
-}
-
 export async function validateClient(clientId: string, redirectUri: string): Promise<OAuthClient> {
-  const client = await getClient(clientId);
+  const client = grokClient();
   if (!client || !client.redirect_uris.includes(redirectUri)) throw new Error("invalid_client");
+  if (clientId !== client.client_id) throw new Error("invalid_client");
   return client;
 }
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ISSUER, SCOPES } from "@/lib/oauth";
 
 export async function GET() {
-  const metadata: Record<string, unknown> = {
+  const metadata = {
     issuer: ISSUER,
     authorization_endpoint: `${ISSUER}/oauth/authorize`,
     token_endpoint: `${ISSUER}/oauth/token`,
@@ -13,9 +13,6 @@ export async function GET() {
     scopes_supported: SCOPES,
     subject_types_supported: ["public"],
   };
-  if (process.env.OAUTH_ALLOW_DYNAMIC_REGISTRATION === "true") {
-    metadata.registration_endpoint = `${ISSUER}/oauth/register`;
-  }
   return NextResponse.json(metadata, { headers: { "Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": "*" } });
 }
 export async function OPTIONS() {

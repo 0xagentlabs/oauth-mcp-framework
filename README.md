@@ -2,13 +2,18 @@
 
 Minimal MCP server for a single-owner production deployment, using OAuth authorization code flow, S256 PKCE and one-time authorization codes.
 
+## Documentation
+
+- [配置与部署文档](docs/configuration.md)
+- [二次开发文档](docs/development.md)
+
 ## Security model
 
 - MCP access requires a signed, audience-bound access token with `mcp:tools`.
-- Clients and exact redirect URIs must be configured in `OAUTH_CLIENTS` or registered explicitly.
+- The built-in `grok` client uses the exact redirect URI configured in `GROK_REDIRECT_URI`.
 - The resource owner approves connections with `OAUTH_AUTHORIZATION_PASSWORD`.
 - Authorization codes expire after five minutes and are consumed atomically in Redis-compatible KV.
-- Dynamic client registration is disabled by default.
+- The OAuth client ID is fixed to `grok`; dynamic client registration is not exposed.
 
 This is a single-owner authorization server. Use an external identity provider instead if you need multiple users, SSO, account recovery, MFA, or per-user consent.
 
@@ -16,7 +21,7 @@ This is a single-owner authorization server. Use an external identity provider i
 
 1. Create a Vercel KV or Upstash Redis database.
 2. Configure every variable shown in `.env.example`.
-3. Replace the sample callback in `OAUTH_CLIENTS` with the exact callback URI sent by your MCP client.
+3. Set `GROK_REDIRECT_URI` to the exact callback URI shown by Grok.
 4. Generate independent secrets:
 
    ```bash
@@ -32,8 +37,6 @@ This is a single-owner authorization server. Use an external identity provider i
    npm run build
    ```
 
-Never enable dynamic registration unless arbitrary public clients are expected. If enabled, add platform-level rate limiting to `/oauth/register`.
-
 ## Endpoints
 
 | Endpoint | Path |
@@ -41,7 +44,6 @@ Never enable dynamic registration unless arbitrary public clients are expected. 
 | MCP | `/api/mcp` |
 | Authorization | `/oauth/authorize` |
 | Token | `/oauth/token` |
-| Dynamic registration (optional) | `/oauth/register` |
 | Authorization server metadata | `/.well-known/oauth-authorization-server` |
 | Protected resource metadata | `/.well-known/oauth-protected-resource` |
 

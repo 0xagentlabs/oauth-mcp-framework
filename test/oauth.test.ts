@@ -3,10 +3,7 @@ import test from "node:test";
 
 process.env.OAUTH_SECRET = "test-secret-that-is-longer-than-32-characters";
 process.env.OAUTH_AUTHORIZATION_PASSWORD = "correct-horse-battery-staple";
-process.env.OAUTH_CLIENTS = JSON.stringify([{
-  client_id: "test-client",
-  redirect_uris: ["https://client.example/callback"],
-}]);
+process.env.GROK_REDIRECT_URI = "https://client.example/callback";
 process.env.KV_REST_API_URL = "https://kv.example";
 process.env.KV_REST_API_TOKEN = "test-token";
 
@@ -15,12 +12,12 @@ const oauth = await import("../src/lib/oauth.ts");
 test("rejects unknown scopes and redirect URIs", async () => {
   assert.throws(() => oauth.validateScope("mcp:tools admin"), /invalid_scope/);
   await assert.rejects(
-    oauth.validateClient("test-client", "https://attacker.example/callback"),
+    oauth.validateClient("grok", "https://attacker.example/callback"),
     /invalid_client/,
   );
   assert.equal(
-    (await oauth.validateClient("test-client", "https://client.example/callback")).client_id,
-    "test-client",
+    (await oauth.validateClient("grok", "https://client.example/callback")).client_id,
+    "grok",
   );
 });
 
@@ -56,8 +53,8 @@ test("authorization attempts are rate limited", async () => {
 
 test("unsigned demo tokens are rejected while issued access tokens remain valid", async () => {
   await assert.rejects(oauth.verifyAccessToken("demo-anything"));
-  const issued = await oauth.createAccessToken({ client_id: "test-client", scope: "mcp:tools" });
-  assert.equal((await oauth.verifyAccessToken(issued.access_token)).client_id, "test-client");
+  const issued = await oauth.createAccessToken({ client_id: "grok", scope: "mcp:tools" });
+  assert.equal((await oauth.verifyAccessToken(issued.access_token)).client_id, "grok");
 });
 
 test("authorization code is consumed exactly once", async () => {
@@ -77,7 +74,7 @@ test("authorization code is consumed exactly once", async () => {
   };
   try {
     const code = await oauth.createAuthCode({
-      client_id: "test-client",
+      client_id: "grok",
       redirect_uri: "https://client.example/callback",
       code_challenge: "challenge",
       scope: "mcp:tools",

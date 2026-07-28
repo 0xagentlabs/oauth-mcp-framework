@@ -11,7 +11,7 @@ export default function Home() {
         <li>MCP endpoint: <code>/api/mcp</code></li>
         <li>Scope: <code>mcp:tools</code></li>
       </ul>
-      <p>客户端 ID 和精确回调地址必须由服务器管理员预先配置。授权时需要输入服务器授权口令。</p>
+      <p>客户端 ID 固定为 <code>grok</code>，服务器只需配置 Grok 的精确回调地址。授权时需要输入服务器授权口令。</p>
     </main>
   );
 }

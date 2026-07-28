@@ -20,8 +20,8 @@ This is a single-owner authorization server. Use an external identity provider i
 ## Production deployment
 
 1. Create a Vercel KV or Upstash Redis database.
-2. Configure every variable shown in `.env.example`.
-3. Set `GROK_REDIRECT_URI` to the exact callback URI shown by Grok.
+2. Bind it to the Vercel project so the two `KV_*` variables are injected.
+3. Configure `OAUTH_SECRET`, `OAUTH_AUTHORIZATION_PASSWORD`, and the exact `GROK_REDIRECT_URI`.
 4. Generate independent secrets:
 
    ```bash
@@ -36,6 +36,8 @@ This is a single-owner authorization server. Use an external identity provider i
    npm run check
    npm run build
    ```
+
+See [配置与部署文档](docs/configuration.md) for minimal and advanced configurations.
 
 ## Endpoints
 

@@ -24,20 +24,52 @@
   - Vercel Marketplace 中的 Upstash Redis
 - 一个启用 HTTPS 的公开域名
 
-生产环境不能省略 KV。它负责授权码一次性消费、授权限流和可选的动态客户端记录。
+生产环境不能省略 KV。它负责授权码一次性消费和授权限流。
 
 ## 3. 环境变量
 
-以 `.env.example` 为模板：
+### 最简单配置：Vercel + 已绑定 Upstash + Grok
+
+Vercel 自动推导服务域名，Upstash 集成自动注入 KV 变量时，只需手工配置：
 
 ```dotenv
-OAUTH_SECRET=独立随机密钥
-OAUTH_AUTHORIZATION_PASSWORD=独立授权口令
+OAUTH_SECRET=至少32字符的独立随机密钥
+OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
+GROK_REDIRECT_URI=https://Grok提供的精确回调地址
+```
+
+其中：
+
+- Client ID 固定为 `grok`，不用配置。
+- Client Secret 留空。
+- `MCP_RESOURCE_URL` 由 Vercel 自动推导，不用配置。
+- 两个 `KV_*` 变量由绑定的 Upstash 集成注入，不用重复配置。
+- `GROK_REDIRECT_URI` 不是密钥，只用于精确验证授权回调地址。
+
+生成两个独立随机值：
+
+```bash
+openssl rand -base64 48
+openssl rand -base64 24
+```
+
+### 高级配置：自定义域名、手工 KV 或非 Vercel
+
+```dotenv
+OAUTH_SECRET=至少32字符的独立随机密钥
+OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
 GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 KV_REST_API_URL=https://your-kv-rest-endpoint
 KV_REST_API_TOKEN=your-kv-rest-token
-# MCP_RESOURCE_URL=https://mcp.example.com
+MCP_RESOURCE_URL=https://mcp.example.com
 ```
+
+- 没有通过 Vercel 集成绑定 Upstash：手工填写两个 `KV_*` 变量。
+- 使用自定义域名：填写 `MCP_RESOURCE_URL`。
+- 部署在其他平台：填写公开的 `MCP_RESOURCE_URL` 和 KV 连接变量。
+- 本地开发：使用开发 KV；公开地址默认是 `http://localhost:3000`。
+
+以下章节解释每个配置项。
 
 ### `MCP_RESOURCE_URL`
 

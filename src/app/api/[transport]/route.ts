@@ -1,6 +1,7 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { z } from "zod";
 import { verifyToken } from "@/lib/auth";
+import { publishPage } from "@/lib/pages";
 
 const handler = createMcpHandler(
   (server) => {
@@ -19,6 +20,18 @@ const handler = createMcpHandler(
       if (!authInfo) return { content: [{ type: "text", text: "Not authenticated" }] };
       return { content: [{ type: "text", text: JSON.stringify({ clientId: authInfo.clientId, scopes: authInfo.scopes, extra: authInfo.extra }, null, 2) }] };
     });
+    server.tool(
+      "publish_page",
+      "Publishes a permanent public text page and returns its URL.",
+      {
+        title: z.string().trim().min(1).max(200),
+        content: z.string().min(1).max(100_000),
+      },
+      async ({ title, content }) => {
+        const page = await publishPage(title, content);
+        return { content: [{ type: "text", text: JSON.stringify(page) }] };
+      },
+    );
   },
   {},
   { basePath: "/api", maxDuration: 60 }

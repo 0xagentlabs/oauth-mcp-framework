@@ -79,6 +79,7 @@ See [配置与部署文档](docs/configuration.md) for minimal and advanced conf
 - `get_server_time`
 - `echo`
 - `whoami`
+- `publish_page` – publish a permanent public text page and return its URL
 
 Replace these examples with the actual tools your server should expose.
 

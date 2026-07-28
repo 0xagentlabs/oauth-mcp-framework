@@ -28,7 +28,7 @@ function grokClient(): OAuthClient | undefined {
   return redirectUri ? { client_id: "grok", client_name: "Grok", redirect_uris: [redirectUri] } : undefined;
 }
 
-async function redis(command: string[]): Promise<unknown> {
+export async function redis(command: string[]): Promise<unknown> {
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) throw new Error("Redis REST URL and token are required");

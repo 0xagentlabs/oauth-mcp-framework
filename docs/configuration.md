@@ -43,7 +43,7 @@ GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 - Client ID 固定为 `grok`，不用配置。
 - Client Secret 留空。
 - `MCP_RESOURCE_URL` 由 Vercel 自动推导，不用配置。
-- 两个 `KV_*` 变量由绑定的 Upstash 集成注入，不用重复配置。
+- Redis 连接变量由绑定的 Upstash 集成注入，不用重复配置；项目同时识别 `KV_*` 和 `UPSTASH_REDIS_*` 命名。
 - `GROK_REDIRECT_URI` 不是密钥，只用于精确验证授权回调地址。
 
 生成两个独立随机值：
@@ -134,9 +134,16 @@ GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 - Client ID 固定为 `grok`。
 - 客户端使用 PKCE，因此 Client Secret 留空。
 
-### `KV_REST_API_URL` 和 `KV_REST_API_TOKEN`
+### Redis 存储变量
 
-填写 Redis 服务提供的 REST URL 和 Token。应用会使用以下命令：
+应用支持两组变量名，配置其中完整一组：
+
+| 来源 | URL | Token |
+|---|---|---|
+| Vercel KV 命名 | `KV_REST_API_URL` | `KV_REST_API_TOKEN` |
+| Upstash 原生命名 | `UPSTASH_REDIS_REST_URL` | `UPSTASH_REDIS_REST_TOKEN` |
+
+不要交叉混用两组变量。应用会使用以下命令：
 
 - `SET ... EX ... NX`
 - `GET`
@@ -144,7 +151,7 @@ GROK_REDIRECT_URI=https://Grok提供的精确回调地址
 - `INCR`
 - `EXPIRE`
 
-KV Token 必须允许这些命令，但不应暴露给浏览器或 MCP 客户端。
+Redis Token 必须允许这些命令，但不应暴露给浏览器或 MCP 客户端。
 
 ## 4. 本地配置
 
@@ -282,8 +289,8 @@ MCP 入口当前只强制要求 `mcp:tools`。
 
 - `OAUTH_SECRET`
 - `OAUTH_AUTHORIZATION_PASSWORD`
-- `KV_REST_API_URL`
-- `KV_REST_API_TOKEN`
+- `KV_REST_API_URL` / `KV_REST_API_TOKEN`
+- 或 `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
 - Redis 服务可用性和命令权限
 
 ### 授权返回 `429`

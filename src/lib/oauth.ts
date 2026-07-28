@@ -29,9 +29,9 @@ function grokClient(): OAuthClient | undefined {
 }
 
 async function redis(command: string[]): Promise<unknown> {
-  const url = process.env.KV_REST_API_URL;
-  const token = process.env.KV_REST_API_TOKEN;
-  if (!url || !token) throw new Error("KV_REST_API_URL and KV_REST_API_TOKEN are required");
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) throw new Error("Redis REST URL and token are required");
   const response = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

@@ -1,29 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuthCode, verifyPkce, createAccessToken } from "@/lib/oauth";
+import {
+  consumeAuthCode,
+  createAccessToken,
+  validateClient,
+  verifyAuthCode,
+  verifyPkce,
+} from "@/lib/oauth";
+
+const corsHeaders = {
+  "Cache-Control": "no-store",
+  "Access-Control-Allow-Origin": "*",
+};
 
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
-    let body: Record<string, string> = {};
-    if (contentType.includes("application/json")) body = await req.json();
-    else {
-      const text = await req.text();
-      body = Object.fromEntries(new URLSearchParams(text));
+    const body: Record<string, string> = contentType.includes("application/json")
+      ? await req.json()
+      : Object.fromEntries(new URLSearchParams(await req.text()));
+    const { grant_type, code, redirect_uri, client_id, code_verifier } = body;
+    if (grant_type !== "authorization_code") {
+      return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400, headers: corsHeaders });
     }
-    const { grant_type, code, redirect_uri, client_id = "grok", code_verifier } = body;
-    if (grant_type !== "authorization_code") return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400 });
-    if (!code || !redirect_uri || !code_verifier) return NextResponse.json({ error: "invalid_request", error_description: "code, redirect_uri, code_verifier required" }, { status: 400 });
+    if (!code || !redirect_uri || !client_id || !code_verifier) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers: corsHeaders });
+    }
+    await validateClient(client_id, redirect_uri);
     const authCode = await verifyAuthCode(code);
-    if (authCode.redirect_uri !== redirect_uri) return NextResponse.json({ error: "invalid_grant", error_description: "redirect_uri mismatch" }, { status: 400 });
-    if (authCode.client_id !== client_id) return NextResponse.json({ error: "invalid_grant", error_description: "client_id mismatch" }, { status: 400 });
-    if (!(await verifyPkce(code_verifier, authCode.code_challenge))) return NextResponse.json({ error: "invalid_grant", error_description: "PKCE verification failed" }, { status: 400 });
-    const token = await createAccessToken({ client_id, scope: authCode.scope, sub: "demo-user" });
-    return NextResponse.json(token, { headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" } });
-  } catch (err: any) {
-    console.error("[token]", err);
-    return NextResponse.json({ error: "invalid_grant", error_description: err?.message || "invalid code" }, { status: 400 });
+    if (authCode.redirect_uri !== redirect_uri || authCode.client_id !== client_id) {
+      throw new Error("invalid_grant");
+    }
+    if (!await verifyPkce(code_verifier, authCode.code_challenge)) throw new Error("invalid_grant");
+    await consumeAuthCode(authCode.jti!);
+    return NextResponse.json(
+      await createAccessToken({ client_id, scope: authCode.scope }),
+      { headers: corsHeaders },
+    );
+  } catch {
+    return NextResponse.json({ error: "invalid_grant" }, { status: 400, headers: corsHeaders });
   }
 }
+
 export async function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "*" } });
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      ...corsHeaders,
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 }

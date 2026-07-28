@@ -1,37 +1,102 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAuthCode, SCOPES } from "@/lib/oauth";
+import {
+  allowAuthorizationAttempt,
+  createAuthCode,
+  validateClient,
+  validateScope,
+  verifyAuthorizationPassword,
+} from "@/lib/oauth";
+
+type AuthorizationRequest = {
+  client_id: string;
+  redirect_uri: string;
+  state: string;
+  scope: string;
+  code_challenge: string;
+};
+
+const esc = (value: string) => value
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+async function parseAuthorizationRequest(values: URLSearchParams): Promise<AuthorizationRequest> {
+  const request = {
+    client_id: values.get("client_id") || "",
+    redirect_uri: values.get("redirect_uri") || "",
+    state: values.get("state") || "",
+    scope: validateScope(values.get("scope") || "mcp:tools"),
+    code_challenge: values.get("code_challenge") || "",
+  };
+  if (values.get("response_type") !== "code") throw new Error("unsupported_response_type");
+  if (values.get("code_challenge_method") !== "S256" || !request.code_challenge) {
+    throw new Error("invalid_request");
+  }
+  await validateClient(request.client_id, request.redirect_uri);
+  return request;
+}
+
+function errorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : "invalid_request";
+  const publicErrors = ["unsupported_response_type", "invalid_request", "invalid_client", "invalid_scope"];
+  return NextResponse.json(
+    { error: publicErrors.includes(message) ? message : "server_error" },
+    { status: publicErrors.includes(message) ? 400 : 500 },
+  );
+}
 
 export async function GET(req: NextRequest) {
-  const sp = req.nextUrl.searchParams;
-  const client_id = sp.get("client_id") || "grok";
-  const redirect_uri = sp.get("redirect_uri") || "";
-  const response_type = sp.get("response_type") || "code";
-  const scope = sp.get("scope") || SCOPES.join(" ");
-  const state = sp.get("state") || "";
-  const code_challenge = sp.get("code_challenge") || "";
-  const code_challenge_method = sp.get("code_challenge_method") || "S256";
-
-  if (response_type !== "code") return NextResponse.json({ error: "unsupported_response_type" }, { status: 400 });
-  if (!redirect_uri) return NextResponse.json({ error: "invalid_request", error_description: "redirect_uri required" }, { status: 400 });
-  if (!code_challenge) return NextResponse.json({ error: "invalid_request", error_description: "PKCE code_challenge required" }, { status: 400 });
-
-  if (sp.get("approve") === "1") {
-    const code = await createAuthCode({ client_id, redirect_uri, code_challenge, code_challenge_method, scope, state });
-    const url = new URL(redirect_uri);
-    url.searchParams.set("code", code);
-    if (state) url.searchParams.set("state", state);
-    return NextResponse.redirect(url.toString());
+  try {
+    const request = await parseAuthorizationRequest(req.nextUrl.searchParams);
+    const hidden = [
+      ["client_id", request.client_id],
+      ["redirect_uri", request.redirect_uri],
+      ["response_type", "code"],
+      ["scope", request.scope],
+      ["state", request.state],
+      ["code_challenge", request.code_challenge],
+      ["code_challenge_method", "S256"],
+    ].map(([name, value]) => `<input type="hidden" name="${name}" value="${esc(value)}">`).join("");
+    const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>授权 MCP 连接</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0f19;color:#e5e7eb}.card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:2rem;max-width:420px;width:90%}h1{font-size:1.4rem;margin:0 0 .5rem}p{color:#9ca3af}.meta{background:#0b0f19;border-radius:8px;padding:.75rem 1rem;margin:1.25rem 0;font-size:.8rem;color:#9ca3af;word-break:break-all}input[type=password]{box-sizing:border-box;width:100%;padding:.8rem;border-radius:8px;border:1px solid #374151;background:#0b0f19;color:#fff;margin-bottom:1rem}.btn{width:100%;border:0;background:#3b82f6;color:#fff;border-radius:10px;padding:.85rem;font-weight:600;cursor:pointer}</style></head>
+<body><form class="card" method="post"><h1>授权 MCP 工具</h1><p>确认客户端及权限，然后输入服务器授权口令。</p>
+<div class="meta"><div><strong>Client</strong>: ${esc(request.client_id)}</div><div><strong>Scopes</strong>: ${esc(request.scope)}</div></div>
+${hidden}<input type="password" name="password" autocomplete="current-password" required aria-label="授权口令"><button class="btn" type="submit">授权连接</button></form></body></html>`;
+    return new NextResponse(html, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (error) {
+    return errorResponse(error);
   }
+}
 
-  const approveUrl = new URL(req.nextUrl);
-  approveUrl.searchParams.set("approve", "1");
-
-  const esc = (s: string) => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-  const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>授权 MCP 连接</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0f19;color:#e5e7eb}.card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:2rem;max-width:420px;width:90%;text-align:center}h1{font-size:1.4rem;margin:0 0 .5rem}p{color:#9ca3af}.meta{background:#0b0f19;border-radius:8px;padding:.75rem 1rem;margin:1.25rem 0;font-size:.8rem;text-align:left;color:#9ca3af;word-break:break-all}.btn{display:inline-block;background:#3b82f6;color:#fff;border-radius:10px;padding:.85rem 1.75rem;font-weight:600;text-decoration:none}.btn:hover{background:#2563eb}.cancel{display:block;margin-top:1rem;color:#6b7280;font-size:.85rem;text-decoration:none}</style></head>
-<body><div class="card"><h1>授权 MCP 工具</h1><p>Grok（或其他 MCP 客户端）请求访问你的自定义工具服务器。</p>
-<div class="meta"><div><strong>Client</strong>: ${esc(client_id)}</div><div><strong>Scopes</strong>: ${esc(scope)}</div></div>
-<a class="btn" href="${approveUrl.toString()}">授权连接</a>
-<a class="cancel" href="${esc(redirect_uri)}">取消</a></div></body></html>`;
-  return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+export async function POST(req: NextRequest) {
+  try {
+    const form = await req.formData();
+    const values = new URLSearchParams();
+    for (const [key, value] of form) if (typeof value === "string") values.set(key, value);
+    const request = await parseAuthorizationRequest(values);
+    const identity = req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
+      || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || "unknown";
+    if (!await allowAuthorizationAttempt(identity)) {
+      return NextResponse.json({ error: "temporarily_unavailable" }, { status: 429 });
+    }
+    if (!await verifyAuthorizationPassword(values.get("password") || "")) {
+      return NextResponse.json({ error: "access_denied" }, { status: 403 });
+    }
+    const code = await createAuthCode(request);
+    const url = new URL(request.redirect_uri);
+    url.searchParams.set("code", code);
+    if (request.state) url.searchParams.set("state", request.state);
+    return NextResponse.redirect(url, 303);
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

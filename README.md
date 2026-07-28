@@ -1,81 +1,66 @@
 # OAuth MCP Framework
 
-Secure **Model Context Protocol (MCP)** server with **OAuth 2.1 + PKCE**, designed for [Grok Custom Connectors](https://grok.com/connectors) and other MCP clients.
+Minimal MCP server for a single-owner production deployment, using OAuth authorization code flow, S256 PKCE and one-time authorization codes.
 
-Deployed on Vercel · Streamable HTTP · One-click style authorization page
+## Security model
 
-## Live Demo
+- MCP access requires a signed, audience-bound access token with `mcp:tools`.
+- Clients and exact redirect URIs must be configured in `OAUTH_CLIENTS` or registered explicitly.
+- The resource owner approves connections with `OAUTH_AUTHORIZATION_PASSWORD`.
+- Authorization codes expire after five minutes and are consumed atomically in Redis-compatible KV.
+- Dynamic client registration is disabled by default.
 
-| Endpoint | URL |
-|----------|-----|
-| MCP | https://oauth-mcp-framework.vercel.app/api/mcp |
-| Authorize | https://oauth-mcp-framework.vercel.app/oauth/authorize |
-| Token | https://oauth-mcp-framework.vercel.app/oauth/token |
-| AS Metadata | https://oauth-mcp-framework.vercel.app/.well-known/oauth-authorization-server |
-| RS Metadata | https://oauth-mcp-framework.vercel.app/.well-known/oauth-protected-resource |
+This is a single-owner authorization server. Use an external identity provider instead if you need multiple users, SSO, account recovery, MFA, or per-user consent.
 
-## Connect to Grok
+## Production deployment
 
-1. Open [grok.com/connectors](https://grok.com/connectors)
-2. **New Connector → Custom**
-3. Fill in:
+1. Create a Vercel KV or Upstash Redis database.
+2. Configure every variable shown in `.env.example`.
+3. Replace the sample callback in `OAUTH_CLIENTS` with the exact callback URI sent by your MCP client.
+4. Generate independent secrets:
 
-| Field | Value |
-|-------|-------|
-| Server URL | `https://oauth-mcp-framework.vercel.app/api/mcp` |
-| Client ID | `grok` |
-| Client Secret | *(leave empty)* |
-| Authorization Endpoint | `https://oauth-mcp-framework.vercel.app/oauth/authorize` |
-| Token Endpoint | `https://oauth-mcp-framework.vercel.app/oauth/token` |
-| Scopes | `mcp:tools` |
-| Token Auth Method | **None (PKCE only)** |
+   ```bash
+   openssl rand -base64 48
+   ```
 
-4. Click **Save & Connect** → authorize on the consent page.
+5. Deploy and verify:
 
-## Demo Bearer Token (for debugging)
+   ```bash
+   npm ci
+   npm test
+   npm run check
+   npm run build
+   ```
 
-```
-Authorization: Bearer mcp-demo-secret-2026
-```
+Never enable dynamic registration unless arbitrary public clients are expected. If enabled, add platform-level rate limiting to `/oauth/register`.
 
-## Built-in Tools
+## Endpoints
 
-- `hello` – greeting with authenticated user
-- `get_server_time` – server UTC time
-- `echo` – echo test
-- `whoami` – current auth info
+| Endpoint | Path |
+|---|---|
+| MCP | `/api/mcp` |
+| Authorization | `/oauth/authorize` |
+| Token | `/oauth/token` |
+| Dynamic registration (optional) | `/oauth/register` |
+| Authorization server metadata | `/.well-known/oauth-authorization-server` |
+| Protected resource metadata | `/.well-known/oauth-protected-resource` |
 
-## Local Development
+## Built-in tools
+
+- `hello`
+- `get_server_time`
+- `echo`
+- `whoami`
+
+Replace these examples with the actual tools your server should expose.
+
+## Local development
+
+Copy `.env.example` to `.env.local`, use a development Redis database, update the public URL and configured redirect URI, then run:
 
 ```bash
 npm install
 npm run dev
-# MCP at http://localhost:3000/api/mcp
-```
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------| 
-| `MCP_DEMO_TOKEN` | Static demo bearer token | `mcp-demo-secret-2026` |
-| `OAUTH_SECRET` | HMAC secret for JWT codes/tokens | demo secret |
-| `MCP_RESOURCE_URL` | Public base URL of this server | auto from Vercel |
-
-## Project Structure
-
-```
-src/
-├── app/
-│   ├── api/[transport]/route.ts          # MCP endpoint
-│   ├── oauth/authorize/route.ts          # One-click consent
-│   ├── oauth/token/route.ts              # Token exchange
-│   ├── oauth/register/route.ts           # Dynamic client registration
-│   └── .well-known/
-│       ├── oauth-authorization-server/   # RFC 8414
-│       └── oauth-protected-resource/     # RFC 9728
-└── lib/
-    ├── auth.ts                           # Token verification
-    └── oauth.ts                          # JWT code/token helpers
 ```
 
 ## License

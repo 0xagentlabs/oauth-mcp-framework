@@ -10,10 +10,10 @@ const handler = createMcpHandler(
     }));
     server.tool(
       "publish_page",
-      "Publishes a permanent public text page and returns its URL.",
+      "Publishes a permanent public page from Markdown and returns its URL.",
       {
         title: z.string().trim().min(1).max(200),
-        content: z.string().min(1).max(100_000),
+        content: z.string().min(1).max(100_000).describe("Markdown content"),
       },
       async ({ title, content }) => ({
         content: [{ type: "text", text: JSON.stringify(await publishPage(title, content)) }],

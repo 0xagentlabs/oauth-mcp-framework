@@ -13,6 +13,7 @@
     "@modelcontextprotocol/sdk": "1.26.0",
     "@vercel/blob": "^2.6.1",
     "jose": "^6.0.0",
+    "markdown-it": "^14.3.0",
     "mcp-handler": "^1.1.0",
     "next": "^16.2.12",
     "react": "^19.0.0",
@@ -25,6 +26,7 @@
     "sharp": "^0.35.3"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

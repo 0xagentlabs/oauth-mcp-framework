@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.OAUTH_SECRET = "test-secret-that-is-longer-than-32-characters";
-process.env.OAUTH_AUTHORIZATION_PASSWORD = "correct-horse-battery-staple";
 process.env.KV_REST_API_URL = "https://kv.example";
 process.env.KV_REST_API_TOKEN = "test-token";
 
@@ -40,11 +39,6 @@ test("requires a valid S256 verifier", async () => {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   assert.equal(await oauth.verifyPkce(verifier, Buffer.from(digest).toString("base64url")), true);
   assert.equal(await oauth.verifyPkce("short", "irrelevant"), false);
-});
-
-test("authorization password is required", async () => {
-  assert.equal(await oauth.verifyAuthorizationPassword("wrong-password"), false);
-  assert.equal(await oauth.verifyAuthorizationPassword("correct-horse-battery-staple"), true);
 });
 
 test("authorization attempts are rate limited", async () => {

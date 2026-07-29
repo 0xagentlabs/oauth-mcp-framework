@@ -4,17 +4,17 @@
 
 ## 1. 运行模型
 
-当前项目是单管理员 OAuth Authorization Server：
+当前项目是公开 OAuth Authorization Server：
 
-- 管理员使用统一授权口令批准连接。
+- 用户在浏览器确认授权，不需要共享口令。
 - MCP 客户端使用 OAuth Authorization Code + S256 PKCE 获取 Access Token。
 - OAuth 客户端固定为 `grok`，并通过受限的动态注册端点自动返回给 Grok。
 - 授权码有效期为 5 分钟，只能兑换一次。
 - Access Token 有效期为 1 小时。
 - Refresh Token 有效期为 30 天，每次刷新都会轮换且旧 Token 立即失效。
-- 授权口令连续尝试限制为每个来源地址 10 分钟内 10 次。
+- 授权确认限制为每个来源地址 10 分钟内 10 次。
 
-如果需要多用户、SSO、MFA、账户恢复或按用户授权，应接入外部身份提供商，而不是继续扩展统一口令模式。
+任何 Grok 用户都可以授权并调用全部公开工具。涉及私有数据、用户隔离或敏感写操作时，必须接入外部身份提供商。
 
 ## 2. 前置条件
 
@@ -35,7 +35,6 @@ Vercel 自动推导服务域名，Upstash 集成自动注入 KV 变量时，只�
 
 ```dotenv
 OAUTH_SECRET=至少32字符的独立随机密钥
-OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
 ```
 
 其中：
@@ -46,18 +45,16 @@ OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
 - Redis 连接变量由绑定的 Upstash 集成注入，不用重复配置；项目同时识别 `KV_*` 和 `UPSTASH_REDIS_*` 命名。
 - Grok Client ID 和官方回调地址均已内置，不用配置。
 
-生成两个独立随机值：
+生成签名密钥：
 
 ```bash
 openssl rand -base64 48
-openssl rand -base64 24
 ```
 
 ### 高级配置：自定义域名、手工 KV 或非 Vercel
 
 ```dotenv
 OAUTH_SECRET=至少32字符的独立随机密钥
-OAUTH_AUTHORIZATION_PASSWORD=至少12字符的独立授权口令
 KV_REST_API_URL=https://your-kv-rest-endpoint
 KV_REST_API_TOKEN=your-kv-rest-token
 MCP_RESOURCE_URL=https://mcp.example.com
@@ -100,13 +97,7 @@ JWT HMAC 签名密钥，生产环境至少 32 个字符。建议生成 48 字节
 openssl rand -base64 48
 ```
 
-不要与授权口令、KV Token 或其他服务密钥复用。轮换该值会立即使所有现有授权码和 Access Token 失效。
-
-### `OAUTH_AUTHORIZATION_PASSWORD`
-
-管理员在授权页输入的统一授权口令，至少 12 个字符。建议使用密码管理器生成独立随机值。
-
-该值不会发送给 MCP 客户端，只提交到本服务的 `/oauth/authorize`。
+不要与 KV Token 或其他服务密钥复用。轮换该值会立即使所有授权码、Access Token 和 Refresh Token 失效。
 
 ### Grok 客户端
 
@@ -213,7 +204,7 @@ npm audit --omit=dev
 | Authorization Endpoint | `https://你的域名/oauth/authorize` |
 | Token Endpoint | `https://你的域名/oauth/token` |
 
-首次连接时，浏览器会打开授权页。确认客户端 ID 和 scope 后输入 `OAUTH_AUTHORIZATION_PASSWORD`。
+首次连接时，浏览器会打开授权页。确认客户端 ID 和 scope 后点击“确认授权”。
 
 ## 7. 上线验证
 
@@ -257,6 +248,7 @@ Client ID 不是 `grok`，或 `redirect_uri` 不是内置的 `https://grok.com/c
 - `mcp:read`
 - `mcp:write`
 - `openid`
+- `offline_access`
 
 MCP 入口当前只强制要求 `mcp:tools`。
 
@@ -277,7 +269,6 @@ MCP 入口当前只强制要求 `mcp:tools`。
 通常是生产配置缺失或 KV 不可用。检查部署日志及：
 
 - `OAUTH_SECRET`
-- `OAUTH_AUTHORIZATION_PASSWORD`
 - `KV_REST_API_URL` / `KV_REST_API_TOKEN`
 - 或 `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
 - Redis 服务可用性和命令权限
@@ -288,8 +279,8 @@ MCP 入口当前只强制要求 `mcp:tools`。
 
 ## 9. 运维注意事项
 
-- 不要记录授权口令、Authorization header、授权码或 KV Token。
-- 为生产、预发布和开发环境使用不同的 OAuth 密钥、授权口令和 KV。
+- 不要记录 Authorization header、授权码或 KV Token。
+- 为生产、预发布和开发环境使用不同的 OAuth 密钥和 KV。
 - 在部署平台开启 HTTPS、访问日志和错误告警。
 - 轮换 `OAUTH_SECRET` 前应接受现有 Token 全部失效。
-- 如需停止新授权，可移除或轮换 `OAUTH_AUTHORIZATION_PASSWORD`。如需同时让已有 Access Token 和 Refresh Token 失效，应轮换 `OAUTH_SECRET`。
+- 如需让已有 Access Token 和 Refresh Token 全部失效，应轮换 `OAUTH_SECRET`。

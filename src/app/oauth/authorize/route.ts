@@ -4,7 +4,6 @@ import {
   createAuthCode,
   validateClient,
   validateScope,
-  verifyAuthorizationPassword,
 } from "@/lib/oauth";
 
 type AuthorizationRequest = {
@@ -59,10 +58,10 @@ export async function GET(req: NextRequest) {
       ["code_challenge_method", "S256"],
     ].map(([name, value]) => `<input type="hidden" name="${name}" value="${esc(value)}">`).join("");
     const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>授权 MCP 连接</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0f19;color:#e5e7eb}.card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:2rem;max-width:420px;width:90%}h1{font-size:1.4rem;margin:0 0 .5rem}p{color:#9ca3af}.meta{background:#0b0f19;border-radius:8px;padding:.75rem 1rem;margin:1.25rem 0;font-size:.8rem;color:#9ca3af;word-break:break-all}input[type=password]{box-sizing:border-box;width:100%;padding:.8rem;border-radius:8px;border:1px solid #374151;background:#0b0f19;color:#fff;margin-bottom:1rem}.btn{width:100%;border:0;background:#3b82f6;color:#fff;border-radius:10px;padding:.85rem;font-weight:600;cursor:pointer}</style></head>
-<body><form class="card" method="post"><h1>授权 MCP 工具</h1><p>确认客户端及权限，然后输入服务器授权口令。</p>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0b0f19;color:#e5e7eb}.card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:2rem;max-width:420px;width:90%}h1{font-size:1.4rem;margin:0 0 .5rem}p{color:#9ca3af}.meta{background:#0b0f19;border-radius:8px;padding:.75rem 1rem;margin:1.25rem 0;font-size:.8rem;color:#9ca3af;word-break:break-all}.btn{width:100%;border:0;background:#3b82f6;color:#fff;border-radius:10px;padding:.85rem;font-weight:600;cursor:pointer}</style></head>
+<body><form class="card" method="post"><h1>授权 MCP 工具</h1><p>确认允许 Grok 使用以下公开工具权限。</p>
 <div class="meta"><div><strong>Client</strong>: ${esc(request.client_id)}</div><div><strong>Scopes</strong>: ${esc(request.scope)}</div></div>
-${hidden}<input type="password" name="password" autocomplete="current-password" required aria-label="授权口令"><button class="btn" type="submit">授权连接</button></form></body></html>`;
+${hidden}<button class="btn" type="submit">确认授权</button></form></body></html>`;
     return new NextResponse(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
@@ -87,9 +86,6 @@ export async function POST(req: NextRequest) {
       || "unknown";
     if (!await allowAuthorizationAttempt(identity)) {
       return NextResponse.json({ error: "temporarily_unavailable" }, { status: 429 });
-    }
-    if (!await verifyAuthorizationPassword(values.get("password") || "")) {
-      return NextResponse.json({ error: "access_denied" }, { status: 403 });
     }
     const code = await createAuthCode(request);
     const url = new URL(request.redirect_uri);

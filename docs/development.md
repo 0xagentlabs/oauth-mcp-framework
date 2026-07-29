@@ -54,7 +54,7 @@ src/
 客户端构造 PKCE
   → GET /oauth/authorize
   → 校验 client_id、redirect_uri、scope、S256
-  → 管理员 POST 授权口令
+  → 用户 POST 确认授权
   → KV 限流
   → 签发 5 分钟 JWT 授权码，并把 jti 写入 KV
   → 客户端 POST /oauth/token
@@ -220,7 +220,7 @@ if (!response.ok) {
 
 ## 9. 改造成多用户认证
 
-当前统一授权口令不适合多用户。需要多用户时，建议由成熟 IdP 负责：
+当前公开确认模式不提供用户身份和隔离。需要多用户时，建议由成熟 IdP 负责：
 
 - 登录和 MFA
 - Session
@@ -231,7 +231,7 @@ if (!response.ok) {
 
 推荐改造边界：
 
-1. 用 IdP 登录/Session 替换 `verifyAuthorizationPassword`。
+1. 在授权确认前增加 IdP 登录和 Session 校验。
 2. 在授权码中写入真实用户 ID。
 3. 用 IdP JWKS 或内部签名服务替换共享 HMAC。
 4. `verifyToken` 从已验证 Token 中映射用户和 scope。
@@ -270,7 +270,7 @@ npm audit --omit=dev
 
 - 非法 scope 和回调地址
 - PKCE verifier
-- 授权口令
+- 公开授权确认和限流
 - 授权限流
 - 非签名 Demo Token
 - 合法 Access Token

@@ -100,17 +100,6 @@ export function validateScope(scope: string): string {
   return requested.join(" ");
 }
 
-export async function verifyAuthorizationPassword(password: string): Promise<boolean> {
-  const expected = process.env.OAUTH_AUTHORIZATION_PASSWORD;
-  if (!expected || expected.length < 12) {
-    if (isProduction) throw new Error("OAUTH_AUTHORIZATION_PASSWORD must be at least 12 characters");
-    return false;
-  }
-  const encode = (value: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  const [actualHash, expectedHash] = await Promise.all([encode(password), encode(expected)]);
-  return new Uint8Array(actualHash).every((byte, index) => byte === new Uint8Array(expectedHash)[index]);
-}
-
 export async function allowAuthorizationAttempt(identity: string): Promise<boolean> {
   const key = `oauth:authorize-limit:${identity.replace(/[^a-zA-Z0-9:._-]/g, "").slice(0, 100) || "unknown"}`;
   const count = Number(await redis(["INCR", key]));

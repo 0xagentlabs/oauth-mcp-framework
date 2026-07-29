@@ -12,29 +12,27 @@ Minimal MCP server for a single-owner production deployment, using OAuth authori
 
 - MCP access requires a signed, audience-bound access token with `mcp:tools`.
 - The built-in `grok` client uses Grok's fixed callback URL.
-- The resource owner approves connections with `OAUTH_AUTHORIZATION_PASSWORD`.
+- Users confirm the public authorization request in the browser; no shared password is required.
 - Authorization codes expire after five minutes and are consumed atomically in Redis-compatible KV.
 - Access tokens expire after one hour; rotating refresh tokens keep the connection active for up to 30 days.
 - Grok obtains the fixed public Client ID automatically through a restricted Dynamic Client Registration endpoint.
 
-This is a single-owner authorization server. Use an external identity provider instead if you need multiple users, SSO, account recovery, MFA, or per-user consent.
+This is a public MCP authorization server. Anyone with a Grok account can authorize and use all exposed tools. Add an external identity provider before exposing private data or sensitive operations.
 
 ## Deploy to Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework&env=OAUTH_SECRET%2COAUTH_AUTHORIZATION_PASSWORD&envDescription=OAuth%20signing%20secret%20and%20authorization%20password&envLink=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework%2Fblob%2Fmain%2Fdocs%2Fconfiguration.md&project-name=oauth-mcp-framework&repository-name=oauth-mcp-framework)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework&env=OAUTH_SECRET&envDescription=OAuth%20signing%20secret&envLink=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework%2Fblob%2Fmain%2Fdocs%2Fconfiguration.md&project-name=oauth-mcp-framework&repository-name=oauth-mcp-framework)
 
 The deployment form asks for:
 
 | Variable | Value |
 |---|---|
 | `OAUTH_SECRET` | Independent random value with at least 32 characters |
-| `OAUTH_AUTHORIZATION_PASSWORD` | Independent authorization password with at least 12 characters |
 
-Generate the two secrets locally:
+Generate the signing secret locally:
 
 ```bash
 openssl rand -base64 48
-openssl rand -base64 24
 ```
 
 ### Add Redis storage

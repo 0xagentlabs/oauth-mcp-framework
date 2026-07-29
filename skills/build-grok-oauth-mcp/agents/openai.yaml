@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Grok OAuth MCP"
+  short_description: "Build production Grok MCP servers with automatic OAuth"
+  default_prompt: "Use $build-grok-oauth-mcp to build a dedicated MCP tool server that Grok can connect to automatically."

@@ -280,6 +280,15 @@ npm audit --omit=dev
 
 涉及真实 Blob 或完整 OAuth 跳转时，应另加部署后的集成测试；不要把生产 Blob Token 写入仓库。
 
+本地连接真实 Blob 时先执行：
+
+```bash
+vercel link
+vercel env pull .env.local
+```
+
+再向 `.env.local` 补充本地 `OAUTH_SECRET`。拉取命令会覆盖该文件，不要反过来执行。
+
 ## 12. 提交前检查
 
 ```bash

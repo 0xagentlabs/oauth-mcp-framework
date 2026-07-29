@@ -119,6 +119,14 @@ openssl rand -base64 48
 
 Vercel 绑定私有 Blob Store 后会注入 `BLOB_READ_WRITE_TOKEN`。它只供服务端使用，不应暴露给浏览器、MCP 客户端或提交到 Git。
 
+Blob 在当前实现中是必需组件，用于：
+
+- 授权码的一次性消费状态
+- Refresh Token 轮换与重放防护
+- `publish_page` 的页面内容
+
+它不是 OAuth 标准指定的存储产品，但当前代码使用 Vercel Blob 实现这些持久化语义。不能只删除 Blob 而继续依赖 Serverless 进程内存。
+
 ## 4. 本地配置
 
 安装依赖：
@@ -127,13 +135,16 @@ Vercel 绑定私有 Blob Store 后会注入 `BLOB_READ_WRITE_TOKEN`。它只供�
 npm ci
 ```
 
-复制环境变量：
+关联 Vercel 项目并拉取开发环境变量：
 
 ```bash
-cp .env.example .env.local
+vercel link
+vercel env pull .env.local
 ```
 
-本地开发需要拉取已连接 Blob Store 的开发环境变量。非生产开发默认地址是 `http://localhost:3000`，无需设置 `MCP_RESOURCE_URL`。
+然后在 `.env.local` 中补充至少 32 字符的本地 `OAUTH_SECRET`。`vercel env pull` 会覆盖该文件，因此应先拉取、再补充密钥。不要提交 `.env.local`。
+
+非生产开发默认地址是 `http://localhost:3000`，无需设置 `MCP_RESOURCE_URL`。
 
 ```bash
 npm run dev
@@ -148,12 +159,35 @@ curl http://localhost:3000/.well-known/oauth-protected-resource
 
 ## 5. Vercel 部署
 
-1. 将仓库导入 Vercel。
-2. 在 Storage 创建或绑定私有 Vercel Blob Store。
-3. 在 Project Settings → Environment Variables 配置本文全部必需变量。
-4. 使用 Vercel 默认域名时不要配置 `MCP_RESOURCE_URL`。
-5. 部署。
-6. 如果之后绑定自定义域名，再将 `MCP_RESOURCE_URL` 设置为该域名并重新部署。
+### 控制台部署
+
+1. 使用 README 中的 Deploy to Vercel 按钮，或将仓库导入 Vercel。
+2. 配置至少 32 字符的 `OAUTH_SECRET`。
+3. 在 Storage 创建 **Private Vercel Blob Store**。
+4. 将 Store 连接到 Production、Preview 和 Development。
+5. 确认环境变量列表中出现 `BLOB_READ_WRITE_TOKEN`。
+6. 重新部署。
+
+Deploy to Vercel 按钮不能自动创建 Blob Store，所以首次构建可能因缺少 Blob 凭证失败。项目已经创建成功；绑定 Blob 后重新部署即可，不需要 Redis。
+
+### CLI 部署
+
+```bash
+vercel link
+vercel env add OAUTH_SECRET production
+vercel blob list-stores
+vercel blob create-store oauth-state \
+  --access private \
+  --yes \
+  --environment production \
+  --environment preview \
+  --environment development
+vercel --prod
+```
+
+如果 `vercel blob list-stores` 已显示当前项目连接的 Store，不要重复创建。
+
+使用 Vercel 默认域名时不要配置 `MCP_RESOURCE_URL`。如果之后绑定自定义域名，将 `MCP_RESOURCE_URL` 设置为该域名并重新部署。
 
 部署前执行：
 
@@ -201,6 +235,12 @@ curl -fsS https://你的域名/.well-known/oauth-authorization-server
 curl -fsS https://你的域名/.well-known/oauth-protected-resource
 ```
 
+检查 MCP 路径对应的元数据：
+
+```bash
+curl -fsS https://你的域名/.well-known/oauth-protected-resource/api/mcp
+```
+
 确认未认证 MCP 请求被拒绝：
 
 ```bash
@@ -214,6 +254,14 @@ curl -i -H 'Authorization: Bearer demo-anything' https://你的域名/api/mcp
 ```
 
 完整授权流程应通过实际 MCP 客户端验证，因为 PKCE verifier 由客户端生成和保存。
+
+Grok 中创建 Custom Connector 时只填写：
+
+```text
+https://你的域名/api/mcp
+```
+
+正常结果是自动发现 OAuth、打开确认页面并完成回调，不要求输入 Client Secret。修改 OAuth 元数据或 CSP 后，应关闭旧授权页并重新发起连接，避免继续使用缓存页面。
 
 ## 8. 常见问题
 
@@ -252,6 +300,10 @@ MCP 入口当前只强制要求 `mcp:tools`。
 - `OAUTH_SECRET`
 - `BLOB_READ_WRITE_TOKEN`
 - Blob Store 是否连接到当前项目和当前环境
+
+### `Vercel Blob storage is required in production`
+
+生产构建没有读到 Blob 凭证。确认 Store 已连接到当前项目的目标环境，然后重新部署。不要通过把真实 Token 写进仓库来绕过该检查。
 
 ## 9. 运维注意事项
 

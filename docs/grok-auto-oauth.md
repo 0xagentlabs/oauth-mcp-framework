@@ -191,12 +191,15 @@ ngrok http 3000
 - `offline_access`
 - 一次性授权码
 - Bearer Token 和 scope 校验
+- 私有 Vercel Blob 持久化授权码、Refresh Token 消费状态和公开页面
 
 当前没有实现：
 
 - 面向任意第三方客户端的通用 Dynamic Client Registration
 - 多用户登录、SSO 或 MFA
 - Token 主动撤销
+
+部署时必须连接私有 Vercel Blob Store。Vercel 会自动注入 `BLOB_READ_WRITE_TOKEN`；它不是 Grok 客户端需要填写的密钥。除 `OAUTH_SECRET` 外，Client ID、回调地址和资源 URL 在 Vercel 默认域名下都不需要手工配置。
 
 当前设计适合单所有者 Grok Connector。若目标是面向不特定客户端和多用户的公共 MCP 服务，应接入外部 IdP，并实现客户端注册、集中撤销和审计。
 

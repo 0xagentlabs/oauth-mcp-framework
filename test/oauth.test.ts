@@ -8,7 +8,7 @@ process.env.OAUTH_SECRET = "test-secret-that-is-longer-than-32-characters";
 
 const oauth = await import("../src/lib/oauth.ts");
 
-test("production startup rejects missing Blob configuration", () => {
+test("production reports missing configuration and rejects token operations", () => {
   const moduleUrl = new URL("../src/lib/oauth.ts", import.meta.url).href;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -22,10 +22,12 @@ test("production startup rejects missing Blob configuration", () => {
     "--experimental-strip-types",
     "--input-type=module",
     "--eval",
-    `await import(${JSON.stringify(moduleUrl)})`,
+    `const oauth = await import(${JSON.stringify(moduleUrl)});
+     if (oauth.getConfigurationStatus().find((item) => item.name === "Blob 持久化")?.ok !== false) process.exit(2);
+     try { await oauth.createAccessToken({ client_id: "grok", scope: "mcp:tools" }); process.exit(3); }
+     catch (error) { if (!String(error).includes("Server configuration error")) process.exit(4); }`,
   ], { env, encoding: "utf8" });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Vercel Blob storage is required in production/);
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("rejects unknown scopes and redirect URIs", async () => {
@@ -60,6 +62,13 @@ test("requires a valid S256 verifier", async () => {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   assert.equal(await oauth.verifyPkce(verifier, Buffer.from(digest).toString("base64url")), true);
   assert.equal(await oauth.verifyPkce("short", "irrelevant"), false);
+});
+
+test("private mode rejects an incorrect access password", async () => {
+  process.env.MCP_AUTH_PASSWORD = "private-access-password";
+  await assert.rejects(oauth.validatePrivateAccess("wrong-password"), /access_denied/);
+  await assert.doesNotReject(oauth.validatePrivateAccess("private-access-password"));
+  delete process.env.MCP_AUTH_PASSWORD;
 });
 
 test("unsigned demo tokens are rejected while issued access tokens remain valid", async () => {

@@ -3,13 +3,41 @@ import { claimBlob, createBlob } from "./blob-store.ts";
 
 const isProduction = process.env.NODE_ENV === "production";
 const secretValue = process.env.OAUTH_SECRET;
+export const PRIVATE_ACCESS = Boolean(process.env.MCP_AUTH_PASSWORD);
 
-if (isProduction && (!secretValue || secretValue.length < 32)) {
-  throw new Error("OAUTH_SECRET must be at least 32 characters in production");
+export function getConfigurationStatus() {
+  const blobConfigured = Boolean(process.env.BLOB_READ_WRITE_TOKEN ||
+    (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID));
+  const resourceUrl = process.env.MCP_RESOURCE_URL;
+  const resourceUrlValid = !resourceUrl ||
+    (resourceUrl.startsWith("https://") && !resourceUrl.endsWith("/") && !resourceUrl.endsWith("/api/mcp"));
+  return [
+    {
+      name: "OAuth 签名密钥",
+      ok: !isProduction || Boolean(secretValue && secretValue.length >= 32),
+      detail: secretValue ? "已配置" : "未配置",
+    },
+    {
+      name: "Blob 持久化",
+      ok: !isProduction || blobConfigured,
+      detail: blobConfigured ? "已连接" : "未连接",
+    },
+    {
+      name: "公开服务地址",
+      ok: resourceUrlValid,
+      detail: resourceUrl ? (resourceUrlValid ? resourceUrl : "格式错误") : "自动推导",
+    },
+    {
+      name: "访问模式",
+      ok: !process.env.MCP_AUTH_PASSWORD || process.env.MCP_AUTH_PASSWORD.length >= 16,
+      detail: process.env.MCP_AUTH_PASSWORD ? "私有" : "公开",
+    },
+  ];
 }
-if (isProduction && !process.env.BLOB_READ_WRITE_TOKEN &&
-    !(process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID)) {
-  throw new Error("Vercel Blob storage is required in production");
+
+function assertConfigured() {
+  const failed = getConfigurationStatus().find((item) => !item.ok);
+  if (failed) throw new Error(`Server configuration error: ${failed.name}`);
 }
 
 const SECRET = new TextEncoder().encode(secretValue || "local-development-secret-change-me");
@@ -81,6 +109,19 @@ export function validateClientId(clientId: string): void {
   if (clientId !== GROK_CLIENT.client_id) throw new Error("invalid_client");
 }
 
+export async function validatePrivateAccess(password: string): Promise<void> {
+  const expected = process.env.MCP_AUTH_PASSWORD;
+  if (!expected) return;
+  const digest = (value: string) =>
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  const [actualHash, expectedHash] = await Promise.all([digest(password), digest(expected)]);
+  const actual = new Uint8Array(actualHash);
+  const target = new Uint8Array(expectedHash);
+  let difference = 0;
+  for (let i = 0; i < target.length; i++) difference |= actual[i] ^ target[i];
+  if (difference !== 0) throw new Error("access_denied");
+}
+
 export function validateScope(scope: string): string {
   const requested = [...new Set(scope.split(/\s+/).filter(Boolean))];
   if (!requested.length || requested.some((item) => !SCOPES.includes(item))) {
@@ -95,6 +136,7 @@ export async function createAuthCode(payload: {
   code_challenge: string;
   scope: string;
 }): Promise<string> {
+  assertConfigured();
   const jti = crypto.randomUUID();
   const code = await new SignJWT({ typ: "auth_code", ...payload })
     .setProtectedHeader({ alg: "HS256" })
@@ -110,6 +152,7 @@ export async function createAuthCode(payload: {
 export async function verifyAuthCode(code: string): Promise<JWTPayload & {
   client_id: string; redirect_uri: string; code_challenge: string; scope: string;
 }> {
+  assertConfigured();
   const { payload } = await jwtVerify(code, SECRET, { issuer: ISSUER });
   if (payload.typ !== "auth_code" || !payload.jti) throw new Error("invalid_code");
   return payload as JWTPayload & {
@@ -124,6 +167,7 @@ export async function consumeAuthCode(jti: string): Promise<void> {
 }
 
 export async function createAccessToken(opts: { client_id: string; scope: string; sub?: string }) {
+  assertConfigured();
   const expiresIn = 3600;
   const access_token = await new SignJWT({
     typ: "access_token",
@@ -163,6 +207,7 @@ export async function createTokenPair(opts: { client_id: string; scope: string; 
 export async function verifyRefreshToken(token: string): Promise<JWTPayload & {
   client_id: string; scope: string; sub: string;
 }> {
+  assertConfigured();
   const { payload } = await jwtVerify(token, SECRET, { issuer: ISSUER, audience: RESOURCE });
   if (payload.typ !== "refresh_token" || !payload.jti) throw new Error("invalid_grant");
   return payload as JWTPayload & { client_id: string; scope: string; sub: string };
@@ -175,6 +220,7 @@ export async function consumeRefreshToken(jti: string): Promise<void> {
 }
 
 export async function verifyAccessToken(token: string) {
+  assertConfigured();
   const { payload } = await jwtVerify(token, SECRET, { issuer: ISSUER, audience: RESOURCE });
   if (payload.typ !== "access_token") throw new Error("invalid_token");
   return payload;

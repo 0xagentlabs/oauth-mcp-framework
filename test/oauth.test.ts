@@ -30,6 +30,26 @@ test("production reports missing configuration and rejects token operations", ()
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("production accepts a Blob Store ID for Vercel OIDC authentication", () => {
+  const moduleUrl = new URL("../src/lib/oauth.ts", import.meta.url).href;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "production",
+    OAUTH_SECRET: "x".repeat(32),
+    BLOB_STORE_ID: "store_test",
+  };
+  delete env.BLOB_READ_WRITE_TOKEN;
+  delete env.VERCEL_OIDC_TOKEN;
+  const result = spawnSync(process.execPath, [
+    "--experimental-strip-types",
+    "--input-type=module",
+    "--eval",
+    `const oauth = await import(${JSON.stringify(moduleUrl)});
+     if (oauth.getConfigurationStatus().find((item) => item.name === "Blob 持久化")?.ok !== true) process.exit(2);`,
+  ], { env, encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("rejects unknown scopes and redirect URIs", async () => {
   assert.throws(() => oauth.validateScope("mcp:tools admin"), /invalid_scope/);
   await assert.rejects(

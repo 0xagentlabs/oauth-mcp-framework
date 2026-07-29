@@ -7,7 +7,7 @@ export const PRIVATE_ACCESS = Boolean(process.env.MCP_AUTH_PASSWORD);
 
 export function getConfigurationStatus() {
   const blobConfigured = Boolean(process.env.BLOB_READ_WRITE_TOKEN ||
-    (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID));
+    process.env.BLOB_STORE_ID);
   const resourceUrl = process.env.MCP_RESOURCE_URL;
   const resourceUrlValid = !resourceUrl ||
     (resourceUrl.startsWith("https://") && !resourceUrl.endsWith("/") && !resourceUrl.endsWith("/api/mcp"));

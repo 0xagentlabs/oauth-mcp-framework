@@ -177,8 +177,13 @@ OAUTH_SECRET=at-least-32-random-characters
 Connect a private Blob Store. Vercel injects:
 
 ```dotenv
-BLOB_READ_WRITE_TOKEN=...
+BLOB_STORE_ID=...
+# VERCEL_OIDC_TOKEN is supplied automatically at build and runtime.
 ```
+
+Legacy Blob integrations may inject `BLOB_READ_WRITE_TOKEN` instead. Accept either
+`BLOB_STORE_ID` or `BLOB_READ_WRITE_TOKEN` as proof that a Store is connected;
+leave OIDC token validation to the Blob SDK because the token is short-lived.
 
 Optional origin override:
 

@@ -13,7 +13,7 @@ Minimal MCP server for a single-owner production deployment, using OAuth authori
 - MCP access requires a signed, audience-bound access token with `mcp:tools`.
 - The built-in `grok` client uses Grok's fixed callback URL.
 - Users confirm the public authorization request in the browser; no shared password is required.
-- Authorization codes expire after five minutes and are consumed atomically in Redis-compatible KV.
+- Authorization codes expire after five minutes and are consumed once using private Vercel Blob markers.
 - Access tokens expire after one hour; rotating refresh tokens keep the connection active for up to 30 days.
 - Grok obtains the fixed public Client ID automatically through a restricted Dynamic Client Registration endpoint.
 
@@ -35,23 +35,16 @@ Generate the signing secret locally:
 openssl rand -base64 48
 ```
 
-### Add Redis storage
+### Add Blob storage
 
 After creating the Vercel project:
 
 1. Open the project in Vercel.
-2. Go to **Storage** → **Create Database**, or install [Upstash Redis from Vercel Marketplace](https://vercel.com/marketplace/upstash).
-3. Connect the Redis database to this project and all required environments.
-4. Confirm that Vercel injected either variable pair:
+2. Go to **Storage** → **Create Database** → **Blob** and select **Private**.
+3. Connect the Blob Store to this project and all required environments.
+4. Confirm that Vercel injected `BLOB_READ_WRITE_TOKEN`, then redeploy.
 
-   | Supported pair | Variables |
-   |---|---|
-   | Vercel KV naming | `KV_REST_API_URL`, `KV_REST_API_TOKEN` |
-   | Upstash naming | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
-
-5. Redeploy the project after connecting storage.
-
-Redis is required for one-time authorization codes and authorization rate limiting. `MCP_RESOURCE_URL` is inferred automatically from Vercel; configure it only when using a custom domain override.
+Blob stores one-time OAuth markers and published pages. Redis is not required. `MCP_RESOURCE_URL` is inferred automatically from Vercel; configure it only for a custom domain override.
 
 Verify the deployment:
 
@@ -85,7 +78,7 @@ Replace these examples with the actual tools your server should expose.
 
 ## Local development
 
-Copy `.env.example` to `.env.local`, use a development Redis database, update the public URL and configured redirect URI, then run:
+Connect a development Blob Store, run `vercel env pull .env.local`, then:
 
 ```bash
 npm install

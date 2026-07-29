@@ -1,6 +1,6 @@
 ---
 name: build-grok-oauth-mcp
-description: Build, adapt, debug, and validate dedicated Streamable HTTP MCP tool servers that Grok can connect to by pasting one server URL and completing browser OAuth. Use for Grok Custom Connector MCP projects requiring OAuth discovery, restricted Dynamic Client Registration, Authorization Code with S256 PKCE, rotating refresh tokens, Vercel/Redis deployment, or Notion-like automatic connection behavior.
+description: Build, adapt, debug, and validate dedicated Streamable HTTP MCP tool servers that Grok can connect to by pasting one server URL and completing browser OAuth. Use for Grok Custom Connector MCP projects requiring OAuth discovery, restricted Dynamic Client Registration, Authorization Code with S256 PKCE, rotating refresh tokens, Vercel Blob deployment, or Notion-like automatic connection behavior.
 ---
 
 # Build Grok OAuth MCP
@@ -43,7 +43,8 @@ Read [references/protocol-contract.md](references/protocol-contract.md) before c
 5. Implement the OAuth boundary.
    - Require Authorization Code and S256 PKCE.
    - Validate Client ID, exact redirect URI, scope, issuer, audience, and token `typ`.
-   - Store authorization-code JTIs in durable Redis-compatible storage and consume them atomically.
+   - Store authorization-code JTIs in durable private Blob storage.
+   - Consume each JTI with a deterministic used-marker created using `allowOverwrite: false`.
    - Issue short Access Tokens and rotating Refresh Tokens.
    - Store Refresh Token JTIs and reject replay with atomic consumption.
    - Never use process memory for one-time tokens on serverless deployments.
@@ -58,8 +59,8 @@ Read [references/protocol-contract.md](references/protocol-contract.md) before c
 7. Configure deployment minimally.
    - Infer the public origin from Vercel when available.
    - Require only a strong OAuth signing secret as a manual secret for public mode.
-   - Support both Vercel KV (`KV_REST_API_*`) and native Upstash (`UPSTASH_REDIS_REST_*`) variable names.
-   - Fail production startup/build with a clear error when neither complete Redis pair exists.
+   - Use a private Vercel Blob Store connected to every deployed environment.
+   - Fail production startup/build clearly when Blob credentials are absent.
    - Inspect the actual deployment environment variable names; documentation is not proof that storage is connected.
    - Keep custom resource URL configuration optional for custom domains or non-Vercel hosts.
 
@@ -84,8 +85,9 @@ Do not call the work complete until evidence shows:
 - browser authorization uses S256 PKCE;
 - authorization codes and Refresh Tokens reject replay;
 - a production build succeeds without a callback or authorization-password environment variable;
-- a production build fails clearly when Redis storage variables are absent;
-- the deployed environment contains one complete Redis variable pair;
+- a production build fails clearly when Blob storage credentials are absent;
+- the deployed environment contains `BLOB_READ_WRITE_TOKEN`, or OIDC credentials plus a Store ID;
+- concurrent or repeated claims produce exactly one success;
 - Grok no longer asks the user to type Client ID or Client Secret.
 
 If the last check still shows a credential form, compare live metadata with Notion MCP and confirm that the deployment—not only the local checkout—contains the registration endpoint. Delete and recreate the Grok Connector after deployment to clear cached configuration.

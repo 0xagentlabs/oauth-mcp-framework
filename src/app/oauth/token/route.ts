@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { BlobStorageError } from "@/lib/blob-store";
 import {
   consumeAuthCode,
   consumeRefreshToken,
@@ -54,7 +55,14 @@ export async function POST(req: NextRequest) {
       await createTokenPair({ client_id, scope: authCode.scope }),
       { headers: corsHeaders },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof BlobStorageError) {
+      console.error(error.message, error.cause);
+      return NextResponse.json(
+        { error: "temporarily_unavailable", error_description: "OAuth storage is unavailable. Check the Vercel Blob binding." },
+        { status: 503, headers: corsHeaders },
+      );
+    }
     return NextResponse.json({ error: "invalid_grant" }, { status: 400, headers: corsHeaders });
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { BlobStorageError } from "@/lib/blob-store";
 import {
-  allowAuthorizationAttempt,
   createAuthCode,
   validateClient,
   validateScope,
@@ -37,8 +37,16 @@ async function parseAuthorizationRequest(values: URLSearchParams): Promise<Autho
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof BlobStorageError) {
+    console.error(error.message, error.cause);
+    return NextResponse.json(
+      { error: "server_error", error_description: "OAuth storage is unavailable. Check the Vercel Blob binding." },
+      { status: 503 },
+    );
+  }
   const message = error instanceof Error ? error.message : "invalid_request";
   const publicErrors = ["unsupported_response_type", "invalid_request", "invalid_client", "invalid_scope"];
+  if (!publicErrors.includes(message)) console.error("OAuth authorization failed", error);
   return NextResponse.json(
     { error: publicErrors.includes(message) ? message : "server_error" },
     { status: publicErrors.includes(message) ? 400 : 500 },
@@ -81,12 +89,6 @@ export async function POST(req: NextRequest) {
     const values = new URLSearchParams();
     for (const [key, value] of form) if (typeof value === "string") values.set(key, value);
     const request = await parseAuthorizationRequest(values);
-    const identity = req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
-      || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-      || "unknown";
-    if (!await allowAuthorizationAttempt(identity)) {
-      return NextResponse.json({ error: "temporarily_unavailable" }, { status: 429 });
-    }
     const code = await createAuthCode(request);
     const url = new URL(request.redirect_uri);
     url.searchParams.set("code", code);

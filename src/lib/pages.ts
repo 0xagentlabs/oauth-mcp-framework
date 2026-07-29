@@ -1,18 +1,19 @@
-import { ISSUER, redis } from "./oauth.ts";
+import { createBlob, readBlob } from "./blob-store.ts";
+import { ISSUER } from "./oauth.ts";
 
 export type PublicPage = { title: string; content: string; createdAt: string };
 
 export async function publishPage(title: string, content: string) {
   const id = crypto.randomUUID();
   const page: PublicPage = { title, content, createdAt: new Date().toISOString() };
-  await redis(["SET", `page:${id}`, JSON.stringify(page)]);
+  await createBlob(`pages/${id}.json`, JSON.stringify(page));
   return { id, url: `${ISSUER}/p/${id}` };
 }
 
 export async function getPage(id: string): Promise<PublicPage | undefined> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return undefined;
-  const value = await redis(["GET", `page:${id}`]);
-  return typeof value === "string" ? JSON.parse(value) as PublicPage : undefined;
+  const value = await readBlob(`pages/${id}.json`);
+  return value ? JSON.parse(value) as PublicPage : undefined;
 }
 
 const escapeHtml = (value: string) => value

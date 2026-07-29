@@ -1,6 +1,6 @@
 # 配置与部署文档
 
-本文面向项目管理员，说明如何配置本地环境、OAuth 客户端、Redis 兼容 KV 和生产部署。
+本文面向项目管理员，说明如何配置本地环境、OAuth 客户端、Vercel Blob 和生产部署。
 
 ## 1. 运行模型
 
@@ -12,7 +12,6 @@
 - 授权码有效期为 5 分钟，只能兑换一次。
 - Access Token 有效期为 1 小时。
 - Refresh Token 有效期为 30 天，每次刷新都会轮换且旧 Token 立即失效。
-- 授权确认限制为每个来源地址 10 分钟内 10 次。
 
 任何 Grok 用户都可以授权并调用全部公开工具。涉及私有数据、用户隔离或敏感写操作时，必须接入外部身份提供商。
 
@@ -20,19 +19,17 @@
 
 - Node.js 20.9 或更高版本
 - npm
-- 一个支持 REST 命令接口的 Redis 兼容服务：
-  - Upstash Redis
-  - Vercel Marketplace 中的 Upstash Redis
+- 一个连接到项目的私有 Vercel Blob Store
 - 一个启用 HTTPS 的公开域名
 
-生产环境不能省略 KV。它负责授权码一次性消费和授权限流。
-生产构建会在缺少完整 Redis URL/Token 变量时直接失败，避免部署后在授权页返回模糊的 `server_error`。
+生产环境不能省略 Blob。它负责授权码、Refresh Token 的一次性消费状态和公开页面。
+生产构建会在缺少 Blob 凭证时直接失败。
 
 ## 3. 环境变量
 
-### 最简单配置：Vercel + 已绑定 Upstash + Grok
+### 最简单配置：Vercel + 已绑定 Blob + Grok
 
-Vercel 自动推导服务域名，Upstash 集成自动注入 KV 变量时，只需手工配置：
+Vercel 自动推导服务域名，Blob 绑定自动注入存储凭证时，只需手工配置：
 
 ```dotenv
 OAUTH_SECRET=至少32字符的独立随机密钥
@@ -43,7 +40,7 @@ OAUTH_SECRET=至少32字符的独立随机密钥
 - Client ID 固定为 `grok`，不用配置。
 - Client Secret 留空。
 - `MCP_RESOURCE_URL` 由 Vercel 自动推导，不用配置。
-- Redis 连接变量由绑定的 Upstash 集成注入，不用重复配置；项目同时识别 `KV_*` 和 `UPSTASH_REDIS_*` 命名。
+- `BLOB_READ_WRITE_TOKEN` 由 Blob 绑定自动注入，不用手工复制。
 - Grok Client ID 和官方回调地址均已内置，不用配置。
 
 生成签名密钥：
@@ -52,19 +49,17 @@ OAUTH_SECRET=至少32字符的独立随机密钥
 openssl rand -base64 48
 ```
 
-### 高级配置：自定义域名、手工 KV 或非 Vercel
+### 高级配置：自定义域名或本地开发
 
 ```dotenv
 OAUTH_SECRET=至少32字符的独立随机密钥
-KV_REST_API_URL=https://your-kv-rest-endpoint
-KV_REST_API_TOKEN=your-kv-rest-token
+BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
 MCP_RESOURCE_URL=https://mcp.example.com
 ```
 
-- 没有通过 Vercel 集成绑定 Upstash：手工填写两个 `KV_*` 变量。
+- 本地开发：通过 `vercel env pull .env.local` 获取 Blob 凭证。
 - 使用自定义域名：填写 `MCP_RESOURCE_URL`。
-- 部署在其他平台：填写公开的 `MCP_RESOURCE_URL` 和 KV 连接变量。
-- 本地开发：使用开发 KV；公开地址默认是 `http://localhost:3000`。
+- 部署在其他平台：填写公开的 `MCP_RESOURCE_URL` 和 Blob 读写凭证。
 
 以下章节解释每个配置项。
 
@@ -98,7 +93,7 @@ JWT HMAC 签名密钥，生产环境至少 32 个字符。建议生成 48 字节
 openssl rand -base64 48
 ```
 
-不要与 KV Token 或其他服务密钥复用。轮换该值会立即使所有授权码、Access Token 和 Refresh Token 失效。
+不要与 Blob Token 或其他服务密钥复用。轮换该值会立即使所有授权码、Access Token 和 Refresh Token 失效。
 
 ### Grok 客户端
 
@@ -120,24 +115,9 @@ openssl rand -base64 48
 - Client ID 固定为 `grok`。
 - 客户端使用 PKCE，因此 Client Secret 留空。
 
-### Redis 存储变量
+### Blob 存储变量
 
-应用支持两组变量名，配置其中完整一组：
-
-| 来源 | URL | Token |
-|---|---|---|
-| Vercel KV 命名 | `KV_REST_API_URL` | `KV_REST_API_TOKEN` |
-| Upstash 原生命名 | `UPSTASH_REDIS_REST_URL` | `UPSTASH_REDIS_REST_TOKEN` |
-
-不要交叉混用两组变量。应用会使用以下命令：
-
-- `SET ... EX ... NX`
-- `GET`
-- `GETDEL`
-- `INCR`
-- `EXPIRE`
-
-Redis Token 必须允许这些命令，但不应暴露给浏览器或 MCP 客户端。
+Vercel 绑定私有 Blob Store 后会注入 `BLOB_READ_WRITE_TOKEN`。它只供服务端使用，不应暴露给浏览器、MCP 客户端或提交到 Git。
 
 ## 4. 本地配置
 
@@ -153,7 +133,7 @@ npm ci
 cp .env.example .env.local
 ```
 
-本地开发仍需要可访问的开发 Redis。非生产开发默认地址已经是 `http://localhost:3000`，无需设置 `MCP_RESOURCE_URL`。
+本地开发需要拉取已连接 Blob Store 的开发环境变量。非生产开发默认地址是 `http://localhost:3000`，无需设置 `MCP_RESOURCE_URL`。
 
 ```bash
 npm run dev
@@ -169,7 +149,7 @@ curl http://localhost:3000/.well-known/oauth-protected-resource
 ## 5. Vercel 部署
 
 1. 将仓库导入 Vercel。
-2. 在 Storage/Marketplace 创建或绑定 Upstash Redis。
+2. 在 Storage 创建或绑定私有 Vercel Blob Store。
 3. 在 Project Settings → Environment Variables 配置本文全部必需变量。
 4. 使用 Vercel 默认域名时不要配置 `MCP_RESOURCE_URL`。
 5. 部署。
@@ -267,21 +247,16 @@ MCP 入口当前只强制要求 `mcp:tools`。
 
 ### `server_error`
 
-通常是生产配置缺失或 KV 不可用。检查部署日志及：
+响应会包含“检查 Vercel Blob 绑定”的说明。检查部署日志及：
 
 - `OAUTH_SECRET`
-- `KV_REST_API_URL` / `KV_REST_API_TOKEN`
-- 或 `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`
-- Redis 服务可用性和命令权限
-
-### 授权返回 `429`
-
-同一来源在 10 分钟内超过 10 次授权尝试。等待窗口结束，并检查是否存在错误客户端重试或暴力尝试。
+- `BLOB_READ_WRITE_TOKEN`
+- Blob Store 是否连接到当前项目和当前环境
 
 ## 9. 运维注意事项
 
-- 不要记录 Authorization header、授权码或 KV Token。
-- 为生产、预发布和开发环境使用不同的 OAuth 密钥和 KV。
+- 不要记录 Authorization header、授权码或 Blob Token。
+- 为生产、预发布和开发环境使用不同的 OAuth 密钥和 Blob Store。
 - 在部署平台开启 HTTPS、访问日志和错误告警。
 - 轮换 `OAUTH_SECRET` 前应接受现有 Token 全部失效。
 - 如需让已有 Access Token 和 Refresh Token 全部失效，应轮换 `OAUTH_SECRET`。

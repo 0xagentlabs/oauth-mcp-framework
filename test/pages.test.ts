@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.OAUTH_SECRET = "test-secret-that-is-longer-than-32-characters";
-process.env.KV_REST_API_URL = "https://kv.example";
-process.env.KV_REST_API_TOKEN = "test-token";
 
 const pages = await import("../src/lib/pages.ts");
 

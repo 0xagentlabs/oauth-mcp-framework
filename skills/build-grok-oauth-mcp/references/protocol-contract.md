@@ -134,7 +134,7 @@ Authorization code:
 - signed and issuer-bound;
 - contains Client ID, redirect URI, PKCE challenge, scope, and JTI;
 - expires in about five minutes;
-- JTI stored with matching TTL;
+- issued JTI stored in private durable storage;
 - atomically consumed only after all binding and PKCE checks pass.
 
 Access Token:
@@ -149,24 +149,22 @@ Refresh Token:
 - signed with issuer and MCP-resource audience;
 - `typ: refresh_token`;
 - contains Client ID, subject, scopes, and JTI;
-- durable JTI stored with its lifetime, such as 30 days;
+- durable issued JTI stored for replay protection;
 - atomically consumed and replaced on every refresh;
 - replay returns `invalid_grant`.
 
 ## Storage contract
 
-Use durable Redis-compatible REST storage for:
+Use deterministic paths in a private Vercel Blob Store:
 
 ```text
-SET oauth:code:{jti} 1 EX 300 NX
-GETDEL oauth:code:{jti}
-SET oauth:refresh:{jti} 1 EX 2592000 NX
-GETDEL oauth:refresh:{jti}
-INCR oauth:authorize-limit:{identity}
-EXPIRE oauth:authorize-limit:{identity} 600
+oauth/issued/code/{jti}
+oauth/used/code/{jti}
+oauth/issued/refresh/{jti}
+oauth/used/refresh/{jti}
 ```
 
-Do not use serverless process memory for one-time state.
+Create each used marker with `allowOverwrite: false`; the first request succeeds and replay gets a precondition failure. Do not use a read-then-delete sequence or serverless process memory. Blob has no TTL, so retain used markers for correctness and add scheduled cleanup only when measured growth requires it.
 
 ## Deployment variables
 
@@ -176,18 +174,10 @@ Public mode:
 OAUTH_SECRET=at-least-32-random-characters
 ```
 
-Configure one complete Redis pair:
+Connect a private Blob Store. Vercel injects:
 
 ```dotenv
-KV_REST_API_URL=...
-KV_REST_API_TOKEN=...
-```
-
-or:
-
-```dotenv
-UPSTASH_REDIS_REST_URL=...
-UPSTASH_REDIS_REST_TOKEN=...
+BLOB_READ_WRITE_TOKEN=...
 ```
 
 Optional origin override:
@@ -198,9 +188,7 @@ MCP_RESOURCE_URL=https://mcp.example.com
 
 Do not add `OAUTH_AUTHORIZATION_PASSWORD` in public mode.
 
-Production startup must reject missing or half-configured Redis credentials. On Vercel, verify
-the actual project environment after connecting storage; do not assume Marketplace integration
-variables exist.
+Production startup must reject missing Blob credentials. On Vercel, verify the actual project environment after connecting storage.
 
 ## Verification commands
 
@@ -234,8 +222,7 @@ Deployment preflight:
 vercel env ls production
 ```
 
-Require one complete Redis pair in the output. Then complete browser authorization; fetching
-metadata alone does not exercise the first Redis write.
+Require Blob credentials in the output. Then complete browser authorization; fetching metadata alone does not exercise the first Blob write.
 
 ## Notion comparison
 

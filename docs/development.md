@@ -10,7 +10,7 @@
 - `@modelcontextprotocol/sdk`
 - `jose`
 - `zod`
-- Redis 兼容 REST KV
+- 私有 Vercel Blob
 
 项目没有数据库 ORM、依赖注入容器或自定义框架。二次开发应优先延续这一结构。
 
@@ -31,6 +31,7 @@ src/
 │   └── page.tsx
 ├── lib/
 │   ├── auth.ts
+│   ├── blob-store.ts
 │   └── oauth.ts
 └── test/
     └── oauth.test.ts
@@ -40,7 +41,8 @@ src/
 
 - `api/[transport]/route.ts`：创建 MCP Server、注册工具、应用 scope 鉴权。
 - `lib/auth.ts`：将 Bearer Token 转换为 MCP `AuthInfo`。
-- `lib/oauth.ts`：客户端、scope、PKCE、JWT、授权码存储和限流。
+- `lib/blob-store.ts`：私有 Blob 读写和一次性消费锁。
+- `lib/oauth.ts`：客户端、scope、PKCE、JWT 和授权码状态。
 - `oauth/authorize`：校验授权请求并展示管理员授权表单。
 - `oauth/register`：仅接受 Grok 官方回调地址，幂等返回固定公共 Client ID。
 - `oauth/token`：校验并原子消费授权码或 Refresh Token，签发新 Token 对。
@@ -55,11 +57,10 @@ src/
   → GET /oauth/authorize
   → 校验 client_id、redirect_uri、scope、S256
   → 用户 POST 确认授权
-  → KV 限流
-  → 签发 5 分钟 JWT 授权码，并把 jti 写入 KV
+  → 签发 5 分钟 JWT 授权码，并把 jti 写入 Blob
   → 客户端 POST /oauth/token
   → 校验客户端、JWT、PKCE
-  → KV GETDEL 原子消费 jti
+  → 以禁止覆盖的 Blob marker 原子声明消费 jti
   → 签发 1 小时 Access Token + 30 天轮换 Refresh Token
 ```
 
@@ -208,7 +209,7 @@ if (!response.ok) {
 
 ## 8. 接入数据库
 
-只有业务工具需要持久数据时才增加数据库。OAuth 授权码继续留在 Redis，因为它依赖短 TTL 和原子 `GETDEL`。
+只有业务工具需要关系型查询时才增加数据库。OAuth 一次性状态和公开页面使用现有私有 Blob Store。
 
 数据库访问的最低要求：
 
@@ -270,15 +271,14 @@ npm audit --omit=dev
 
 - 非法 scope 和回调地址
 - PKCE verifier
-- 公开授权确认和限流
-- 授权限流
+- Blob 一次性消费
 - 非签名 Demo Token
 - 合法 Access Token
 - 授权码重复消费
 
 新增安全分支、解析器、循环或业务写操作时，至少增加一个会在逻辑回归时失败的测试。测试文件放在 `test/*.test.ts`。
 
-涉及真实 Redis 或完整 OAuth 跳转时，应另加部署后的集成测试；不要把生产 KV Token 写入仓库。
+涉及真实 Blob 或完整 OAuth 跳转时，应另加部署后的集成测试；不要把生产 Blob Token 写入仓库。
 
 ## 12. 提交前检查
 

@@ -152,6 +152,21 @@ code {
 .config-row code { padding: 0; background: none; color: var(--text); font-weight: 700; }
 .guide-warning { margin: 0; padding: 12px 14px; border-radius: 10px; background: rgba(217, 119, 6, .1); color: var(--muted); font-size: 13px; }
 
+.deploy-generator { padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.generator-fields { display: grid; gap: 14px; margin: 20px 0; }
+.generator-fields label { display: grid; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 650; }
+.generator-fields input:not([type="checkbox"]) { width: 100%; padding: 12px 13px; border: 1px solid var(--line); border-radius: 10px; outline: 0; background: var(--bg); color: var(--text); font: inherit; }
+.generator-fields input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+.generator-fields .check-field { display: flex; grid-template-columns: none; flex-direction: row; align-items: center; gap: 9px; color: var(--text); }
+.check-field input { width: 17px; height: 17px; accent-color: var(--accent); }
+.generate-button, .deploy-button { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 10px; background: var(--accent); color: white; padding: 12px 16px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.generated-config { margin-top: 24px; padding-top: 4px; border-top: 1px solid var(--line); }
+.generated-config h3 { margin: 24px 0 8px; font-size: 16px; }
+.generated-config p, .generated-config li { color: var(--muted); font-size: 14px; }
+.code-box { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: var(--code); }
+.code-box pre { margin: 0; padding: 16px 70px 16px 14px; overflow: auto; color: var(--text); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-box button { position: absolute; top: 9px; right: 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text); padding: 6px 9px; cursor: pointer; }
+
 @media (max-width: 560px) {
   .home { margin: 16px auto; border-radius: 18px; }
   .endpoint-list li { display: block; }

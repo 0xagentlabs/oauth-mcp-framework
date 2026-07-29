@@ -1,4 +1,5 @@
 import { getConfigurationStatus } from "@/lib/oauth";
+import DeployLinkGenerator from "./DeployLinkGenerator";
 
 export default function Home() {
   const configuration = getConfigurationStatus();
@@ -54,6 +55,8 @@ export default function Home() {
         </ol>
         <p className="guide-warning">轮换访问密码不会撤销已经签发的 Token。如需撤销全部连接，同时轮换 <code>OAUTH_SECRET</code>。</p>
       </section>
+      <h2>生成部署配置</h2>
+      <DeployLinkGenerator />
     </main>
   );
 }

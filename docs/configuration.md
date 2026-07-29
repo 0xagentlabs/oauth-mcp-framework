@@ -38,7 +38,8 @@
 Blob Store 用于保存：
 
 - 授权码的一次性消费状态；
-- Refresh Token 的轮换和重放防护状态。
+- Refresh Token 的轮换和重放防护状态；
+- `publish_page` 发布的页面。
 
 不要手工把 Blob 凭证写进源码或提交到 Git。
 

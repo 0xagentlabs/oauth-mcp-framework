@@ -67,6 +67,7 @@ Access Token 无效、过期或缺少 `mcp:tools` 时，请求不会进入工具
 ## 示例工具
 
 - `hello`
+- `publish_page`：发布永久公开文本页面并返回 URL
 
 业务工具统一注册在 `src/app/api/[transport]/route.ts`。开发说明见 [二次开发文档](docs/development.md)。
 

@@ -122,11 +122,42 @@ code {
 .status-icon.ok { background: #16a34a; }
 .status-icon.bad { background: #dc2626; }
 
+.private-guide {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.guide-heading { display: flex; align-items: flex-start; gap: 13px; }
+.guide-heading p { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+.guide-icon { display: grid; flex: 0 0 auto; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: rgba(37, 99, 235, .12); color: var(--accent); font-size: 22px; font-weight: 800; }
+.private-guide ol { margin: 20px 0; padding-left: 24px; }
+.private-guide li { padding-left: 5px; }
+.private-guide li + li { margin-top: 10px; }
+
+.config-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--code);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.config-row code { padding: 0; background: none; color: var(--text); font-weight: 700; }
+.guide-warning { margin: 0; padding: 12px 14px; border-radius: 10px; background: rgba(217, 119, 6, .1); color: var(--muted); font-size: 13px; }
+
 @media (max-width: 560px) {
   .home { margin: 16px auto; border-radius: 18px; }
   .endpoint-list li { display: block; }
   .endpoint-list code { display: block; margin-top: 5px; }
   .status-list li { align-items: flex-start; }
+  .config-row { display: grid; gap: 3px; }
 }
 
 @media (prefers-color-scheme: dark) {

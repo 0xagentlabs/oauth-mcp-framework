@@ -31,6 +31,29 @@ export default function Home() {
         ))}
       </ul>
       {!ready && <p className="note">请检查部署环境变量和 Blob 绑定，修改后重新部署。检测结果不会显示任何密钥内容。</p>}
+      <h2>启用私有 MCP</h2>
+      <section className="private-guide">
+        <div className="guide-heading">
+          <span className="guide-icon">⌁</span>
+          <div>
+            <strong>单所有者密码保护</strong>
+            <p>授权前验证访问密码，适合个人或少量可信使用者。</p>
+          </div>
+        </div>
+        <ol>
+          <li>打开 Vercel Project 的 <strong>Settings → Environment Variables</strong>。</li>
+          <li>
+            添加环境变量：
+            <div className="config-row">
+              <code>MCP_AUTH_PASSWORD</code>
+              <span>至少 16 个随机字符</span>
+            </div>
+          </li>
+          <li>Environment 选择 <strong>Production</strong>，保存后到 Deployments 执行 <strong>Redeploy</strong>。</li>
+          <li>删除 Grok 中的旧连接，重新连接并在授权页输入该密码。</li>
+        </ol>
+        <p className="guide-warning">轮换访问密码不会撤销已经签发的 Token。如需撤销全部连接，同时轮换 <code>OAUTH_SECRET</code>。</p>
+      </section>
     </main>
   );
 }

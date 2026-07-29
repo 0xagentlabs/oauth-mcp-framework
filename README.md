@@ -1,144 +1,93 @@
 # OAuth MCP Framework
 
-Minimal MCP server for a single-owner production deployment, using OAuth authorization code flow, S256 PKCE and one-time authorization codes.
+一个面向 Grok Custom Connector 的 MCP 服务模板，内置 OAuth Authorization Code、S256 PKCE、Access Token、Refresh Token 和标准 OAuth 元数据发现。
 
-## Documentation
+## 最简单配置
 
-- [配置与部署文档](docs/configuration.md)
-- [二次开发文档](docs/development.md)
-- [Grok 自动 OAuth MCP 接入指南](docs/grok-auto-oauth.md)
+生产环境只需：
 
-## Security model
-
-- MCP access requires a signed, audience-bound access token with `mcp:tools`.
-- The built-in `grok` client uses Grok's fixed callback URL.
-- Users confirm the public authorization request in the browser; no shared password is required.
-- Authorization codes expire after five minutes and are consumed once using private Vercel Blob markers.
-- Access tokens expire after one hour; rotating refresh tokens keep the connection active for up to 30 days.
-- Grok obtains the fixed public Client ID automatically through a restricted Dynamic Client Registration endpoint.
-
-This is a public MCP authorization server. Anyone with a Grok account can authorize and use all exposed tools. Add an external identity provider before exposing private data or sensitive operations.
-
-## Deploy to Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework&env=OAUTH_SECRET&envDescription=OAuth%20signing%20secret&envLink=https%3A%2F%2Fgithub.com%2F0xagentlabs%2Foauth-mcp-framework%2Fblob%2Fmain%2Fdocs%2Fconfiguration.md&project-name=oauth-mcp-framework&repository-name=oauth-mcp-framework)
-
-### Minimum production configuration
-
-| Item | Configuration |
+| 项目 | 配置 |
 |---|---|
-| OAuth signing key | Set `OAUTH_SECRET` to an independent random value of at least 32 characters |
-| Durable storage | Connect one **Private Vercel Blob Store** to the project |
+| 环境变量 | `OAUTH_SECRET`：至少 32 字符的独立随机值 |
+| 持久化存储 | 一个连接到项目的 Private Vercel Blob Store |
+| Grok MCP URL | `https://你的域名/api/mcp` |
 
-Generate the signing secret locally:
+以下内容已经内置或由部署平台注入，无需配置：
 
-```bash
-openssl rand -base64 48
+- Client ID：`grok`
+- Client Secret：留空
+- Grok 回调地址：已内置
+- `MCP_RESOURCE_URL`：使用默认生产域名时自动推导
+- `BLOB_READ_WRITE_TOKEN`：连接 Blob Store 后自动注入
+
+完整部署步骤见 [部署说明](docs/configuration.md)。
+
+## OAuth 发现流程
+
+```text
+Grok 请求 /api/mcp（未携带 Token）
+  → 服务返回 401 和 Protected Resource Metadata 地址
+  → Grok 读取 /.well-known/oauth-protected-resource/api/mcp
+  → Grok 读取 /.well-known/oauth-authorization-server
+  → Grok 通过 /oauth/register 获取固定 Client ID：grok
+  → Grok 得到授权地址、Token 地址、scope 和 PKCE 要求
 ```
 
-Vercel automatically injects `BLOB_READ_WRITE_TOKEN` after the Blob Store is connected. Do not copy it into source code or Git.
+## 用户授权流程
 
-The following values are built in or inferred and normally must not be configured:
-
-- Client ID: `grok`
-- Client Secret: none
-- Grok redirect URI: fixed in code
-- `MCP_RESOURCE_URL`: inferred from the Vercel production URL
-- Redis/KV: not used
-
-### Deploy-button workflow
-
-1. Click **Deploy with Vercel** and set `OAUTH_SECRET`.
-2. Open the created Vercel project.
-3. Go to **Storage** → **Create Database** → **Blob**.
-4. Create a **Private** Blob Store and connect it to Production, Preview and Development.
-5. Redeploy the project.
-
-The deploy button cannot create the Blob Store. The first build may therefore fail with `Vercel Blob storage is required in production`; after connecting Blob and redeploying, the build should pass.
-
-### Vercel CLI workflow
-
-```bash
-vercel link
-vercel env add OAUTH_SECRET production
-vercel blob create-store oauth-state \
-  --access private \
-  --yes \
-  --environment production \
-  --environment preview \
-  --environment development
-vercel --prod
+```text
+Grok 生成 PKCE verifier、challenge 和 state
+  → 浏览器打开 GET /oauth/authorize
+  → 服务校验 Client ID、回调地址、scope 和 S256 PKCE
+  → 用户点击“确认授权”
+  → 服务生成 5 分钟、一次性的授权码
+  → 浏览器跳回 Grok 固定回调地址
+  → Grok 调用 POST /oauth/token，并提交授权码和 verifier
+  → 服务校验并消费授权码
+  → 返回 1 小时 Access Token 和 30 天 Refresh Token
 ```
 
-If a Store is already connected, do not create another one. Check first:
+Refresh Token 每次使用后立即失效，同时签发新的 Token 对；重复使用旧 Refresh Token 会被拒绝。
 
-```bash
-vercel blob list-stores
-vercel env ls
+> 当前授权页只确认是否授权，不验证真实用户身份。任何 Grok 用户都能授权并调用全部工具。若工具涉及私有数据、多用户隔离或敏感操作，必须先接入外部身份提供商。
+
+## MCP 执行流程
+
+```text
+Grok 携带 Authorization: Bearer <Access Token> 请求 /api/mcp
+  → 服务验证 JWT 签名、issuer、audience 和 Token 类型
+  → 服务检查 mcp:tools scope
+  → MCP 协议处理器解析请求并匹配工具
+  → Zod 校验工具参数
+  → 执行工具并返回 MCP 结果
 ```
 
-Blob stores one-time OAuth markers, Refresh Token rotation state and published pages.
+Access Token 无效、过期或缺少 `mcp:tools` 时，请求不会进入工具。
 
-### Advanced configuration
-
-Only set `MCP_RESOURCE_URL` when using a custom domain or a non-Vercel host:
-
-```dotenv
-OAUTH_SECRET=at-least-32-random-characters
-BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
-MCP_RESOURCE_URL=https://mcp.example.com
-```
-
-On Vercel, leave `BLOB_READ_WRITE_TOKEN` to the Storage integration. After changing `MCP_RESOURCE_URL`, existing OAuth tokens become invalid because their issuer and audience change.
-
-Verify the deployment:
-
-```bash
-curl -fsS https://YOUR_DOMAIN/.well-known/oauth-authorization-server
-curl -fsS https://YOUR_DOMAIN/.well-known/oauth-protected-resource/api/mcp
-curl -i https://YOUR_DOMAIN/api/mcp
-```
-
-The final command must return `401` with a `WWW-Authenticate` header pointing to the protected-resource metadata.
-
-Then add `https://YOUR_DOMAIN/api/mcp` as a Grok Custom Connector. Grok should discover OAuth automatically, open the browser confirmation page and return without asking for a Client Secret.
-
-See [配置与部署文档](docs/configuration.md) for minimal and advanced configurations.
-
-## Endpoints
-
-| Endpoint | Path |
-|---|---|
-| MCP | `/api/mcp` |
-| Authorization | `/oauth/authorize` |
-| Token | `/oauth/token` |
-| Dynamic client registration | `/oauth/register` |
-| Authorization server metadata | `/.well-known/oauth-authorization-server` |
-| Protected resource metadata | `/.well-known/oauth-protected-resource` |
-
-## Built-in tools
+## 示例工具
 
 - `hello`
-- `get_server_time`
-- `echo`
-- `whoami`
-- `publish_page` – publish a permanent public text page and return its URL
 
-Replace these examples with the actual tools your server should expose.
+业务工具统一注册在 `src/app/api/[transport]/route.ts`。开发说明见 [二次开发文档](docs/development.md)。
 
-## Local development
+## 端点
 
-Connect the Blob Store to Development, then:
+| 用途 | 地址 |
+|---|---|
+| MCP | `/api/mcp` |
+| 授权页 | `/oauth/authorize` |
+| Token | `/oauth/token` |
+| 动态客户端注册 | `/oauth/register` |
+| 授权服务器元数据 | `/.well-known/oauth-authorization-server` |
+| 受保护资源元数据 | `/.well-known/oauth-protected-resource/api/mcp` |
 
-```bash
-npm install
-vercel link
-vercel env pull .env.local
-# Add a local OAUTH_SECRET with at least 32 characters to .env.local
-npm run dev
-```
+## 安全边界
 
-`.env.local` is ignored by Git. `vercel env pull` overwrites that file, so add the local `OAUTH_SECRET` after pulling.
+- 授权码有效期 5 分钟，只能兑换一次。
+- Access Token 有效期 1 小时，并绑定 MCP audience。
+- Refresh Token 有效期 30 天，单次使用并轮换。
+- 授权码和 Refresh Token 的消费状态保存在 Private Blob Store。
+- 轮换 `OAUTH_SECRET` 会使现有授权码和全部 Token 立即失效。
 
 ## License
 

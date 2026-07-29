@@ -1,307 +1,108 @@
-# 二次开发文档
+# 二次开发
 
-本文面向在当前项目上增加 MCP 工具、业务服务或认证能力的开发者。
-
-## 1. 技术栈
-
-- Next.js App Router
-- TypeScript
-- `mcp-handler`
-- `@modelcontextprotocol/sdk`
-- `jose`
-- `zod`
-- 私有 Vercel Blob
-
-项目没有数据库 ORM、依赖注入容器或自定义框架。二次开发应优先延续这一结构。
-
-## 2. 目录结构
+## 目录
 
 ```text
 src/
-├── app/
-│   ├── api/[transport]/route.ts
-│   ├── oauth/
-│   │   ├── authorize/route.ts
-│   │   ├── register/route.ts
-│   │   └── token/route.ts
-│   ├── .well-known/
-│   │   ├── oauth-authorization-server/route.ts
-│   │   └── oauth-protected-resource/route.ts
-│   ├── layout.tsx
-│   └── page.tsx
-├── lib/
-│   ├── auth.ts
-│   ├── blob-store.ts
-│   └── oauth.ts
-└── test/
-    └── oauth.test.ts
+├── app/api/[transport]/route.ts       # MCP 工具与鉴权入口
+├── app/oauth/authorize/route.ts       # 授权页和授权码
+├── app/oauth/register/route.ts        # Grok 动态注册
+├── app/oauth/token/route.ts           # Token 签发与刷新
+└── lib/
+    ├── auth.ts                        # Bearer Token → MCP AuthInfo
+    ├── blob-store.ts                  # 一次性状态
+    └── oauth.ts                       # OAuth 校验与 JWT
 ```
 
-职责：
+## 添加工具
 
-- `api/[transport]/route.ts`：创建 MCP Server、注册工具、应用 scope 鉴权。
-- `lib/auth.ts`：将 Bearer Token 转换为 MCP `AuthInfo`。
-- `lib/blob-store.ts`：私有 Blob 读写和一次性消费锁。
-- `lib/oauth.ts`：客户端、scope、PKCE、JWT 和授权码状态。
-- `oauth/authorize`：校验授权请求并展示管理员授权表单。
-- `oauth/register`：仅接受 Grok 官方回调地址，幂等返回固定公共 Client ID。
-- `oauth/token`：校验并原子消费授权码或 Refresh Token，签发新 Token 对。
-- `.well-known`：OAuth 客户端自动发现所需元数据。
-
-## 3. 请求调用链
-
-### OAuth
-
-```text
-客户端构造 PKCE
-  → GET /oauth/authorize
-  → 校验 client_id、redirect_uri、scope、S256
-  → 用户 POST 确认授权
-  → 签发 5 分钟 JWT 授权码，并把 jti 写入 Blob
-  → 客户端 POST /oauth/token
-  → 校验客户端、JWT、PKCE
-  → 以禁止覆盖的 Blob marker 原子声明消费 jti
-  → 签发 1 小时 Access Token + 30 天轮换 Refresh Token
-```
-
-### MCP
-
-```text
-客户端请求 /api/mcp
-  → withMcpAuth
-  → verifyToken
-  → 校验 JWT issuer、audience、typ
-  → 检查 mcp:tools scope
-  → 执行 MCP tool
-```
-
-安全校验应留在这些共享边界，不要在每个工具内重复实现 Token 校验。
-
-## 4. 添加 MCP Tool
-
-工具统一注册在 `src/app/api/[transport]/route.ts`。最小示例：
+工具注册在 `src/app/api/[transport]/route.ts`：
 
 ```ts
 server.tool(
   "get_order",
-  "Returns one order visible to the authenticated user.",
-  {
-    orderId: z.string().min(1).max(100),
-  },
+  "Returns one order.",
+  { orderId: z.string().min(1).max(100) },
   async ({ orderId }, { authInfo }) => {
     const userId = authInfo?.extra?.userId;
     if (typeof userId !== "string") {
-      return {
-        isError: true,
-        content: [{ type: "text", text: "Authenticated user is required" }],
-      };
+      return { isError: true, content: [{ type: "text", text: "Unauthorized" }] };
     }
 
     const order = await getOrderForUser(orderId, userId);
-    if (!order) {
-      return {
-        isError: true,
-        content: [{ type: "text", text: "Order not found" }],
-      };
-    }
-
     return {
-      content: [{ type: "text", text: JSON.stringify(order) }],
+      content: [{ type: "text", text: order ? JSON.stringify(order) : "Not found" }],
+      isError: !order,
     };
   },
 );
 ```
 
-开发要求：
+要求：
 
 - 所有外部参数用 Zod 限制类型、长度和格式。
-- 数据访问必须绑定 `authInfo` 中的主体，不能只按客户端传入的资源 ID 查询。
-- 不向客户端返回数据库错误、密钥、内部路径或调用栈。
-- 有副作用的工具应在描述和返回结果中明确行为。
-- 对删除、付款、发送消息等重要操作增加业务级确认或幂等键。
-- 不把 Access Token 传给下游日志、提示词或第三方 API。
+- 查询必须绑定 `authInfo` 中的用户或租户，不能只相信客户端提交的资源 ID。
+- 不向客户端返回密钥、内部错误、路径或调用栈。
+- 删除、付款、发送消息等操作需要业务确认或幂等键。
+- 服务端密钥只放部署平台环境变量。
 
-如果工具数量明显增加，再按业务域拆成普通函数：
+只有多个工具复用同一逻辑时，才提取新的业务模块；单个工具不需要注册器、工厂或接口层。
+
+## OAuth 调用链
 
 ```text
-src/lib/orders.ts
-src/lib/customers.ts
+/oauth/authorize
+  → 校验 client_id、redirect_uri、scope、S256 PKCE
+  → 用户确认
+  → 创建 5 分钟授权码并在 Blob 记录
+
+/oauth/token
+  → 校验授权码和 PKCE
+  → 原子消费 Blob 状态
+  → 签发 Access Token 和轮换 Refresh Token
+
+/api/mcp
+  → 校验 Bearer Token 的签名、issuer、audience、typ
+  → 检查 mcp:tools
+  → 执行工具
 ```
 
-不要为单个工具预先创建注册器、工厂或接口层。
+OAuth 校验应保留在共享入口，不要复制到每个工具。
 
-## 5. 使用认证信息
+## 修改权限
 
-`verifyToken` 当前产生：
+Scope 由 `src/lib/oauth.ts` 的 `SCOPES` 声明，MCP 必需权限由路由中的 `requiredScopes` 指定。修改时同时确认：
 
-```ts
-{
-  token: string,
-  clientId: string,
-  scopes: string[],
-  extra: {
-    userId: string | undefined,
-    mode: "oauth"
-  }
-}
-```
+- 授权服务器和受保护资源元数据会暴露正确的 scope；
+- Access Token 携带所请求的 scope；
+- MCP 入口或具体工具强制执行对应权限；
+- 测试覆盖拒绝分支。
 
-当前统一授权模型默认主体为 `resource-owner`。它只能表达一个资源所有者，不能表达真实的多用户身份。
+## 多用户
 
-如需在 TypeScript 中避免 `any`，可在业务模块定义最小检查函数：
+当前授权页只是公开确认页，Token 主体统一为 `resource-owner`，不提供真实用户身份。
 
-```ts
-function authenticatedUser(authInfo: AuthInfo | undefined): string {
-  const userId = authInfo?.extra?.userId;
-  if (typeof userId !== "string") throw new Error("unauthorized");
-  return userId;
-}
-```
+需要私有数据、多用户隔离、SSO、MFA 或审计时，应接入成熟身份提供商，并在授权码和 Access Token 中使用已验证的用户 ID。不要通过在授权表单增加用户名字段来模拟登录。
 
-只有多个工具都需要该逻辑时才提取共享函数。
+## 安全不变量
 
-## 6. 增加或调整 Scope
+修改 OAuth 核心时必须保持：
 
-Scope 同时影响三处：
-
-1. `src/lib/oauth.ts` 中的 `SCOPES`
-2. MCP 入口 `requiredScopes`
-3. OAuth 元数据返回的 `scopes_supported`
-
-元数据会自动读取 `SCOPES`，因此通常只需要修改前两处。
-
-例如把整个 MCP 服务改为要求读权限：
-
-```ts
-const authHandler = withMcpAuth(handler, verifyToken, {
-  required: true,
-  requiredScopes: ["mcp:read"],
-  resourceMetadataPath: "/.well-known/oauth-protected-resource",
-});
-```
-
-当前 `withMcpAuth` 在路由级统一检查 scope。如果不同工具需要不同权限，应在工具执行前检查 `authInfo.scopes`，并为每个权限分支增加测试。
-
-## 7. 接入业务 API
-
-服务端密钥应放入部署平台环境变量，例如：
-
-```dotenv
-ORDERS_API_URL=https://orders.internal.example
-ORDERS_API_TOKEN=...
-```
-
-调用下游时设置超时并处理非成功状态：
-
-```ts
-const response = await fetch(`${process.env.ORDERS_API_URL}/orders/${encodeURIComponent(orderId)}`, {
-  headers: { Authorization: `Bearer ${process.env.ORDERS_API_TOKEN}` },
-  signal: AbortSignal.timeout(10_000),
-  cache: "no-store",
-});
-
-if (!response.ok) {
-  throw new Error(`Orders API failed with ${response.status}`);
-}
-```
-
-返回给 MCP 客户端时应转换成稳定的公开错误，详细错误只进入经过脱敏的服务端日志。
-
-## 8. 接入数据库
-
-只有业务工具需要关系型查询时才增加数据库。OAuth 一次性状态和公开页面使用现有私有 Blob Store。
-
-数据库访问的最低要求：
-
-- 所有查询参数化。
-- 查询必须包含租户或用户边界。
-- 写操作使用数据库约束保证唯一性和幂等性。
-- 密钥仅使用服务端环境变量。
-- 不在 MCP 返回中直接序列化完整数据库对象。
-
-## 9. 改造成多用户认证
-
-当前公开确认模式不提供用户身份和隔离。需要多用户时，建议由成熟 IdP 负责：
-
-- 登录和 MFA
-- Session
-- 用户同意
-- Token 签发或 Token Exchange
-- 密钥轮换与 JWKS
-- 撤销、审计和账户恢复
-
-推荐改造边界：
-
-1. 在授权确认前增加 IdP 登录和 Session 校验。
-2. 在授权码中写入真实用户 ID。
-3. 用 IdP JWKS 或内部签名服务替换共享 HMAC。
-4. `verifyToken` 从已验证 Token 中映射用户和 scope。
-5. 保留客户端、回调 URI、PKCE 和一次性授权码校验。
-
-不要只把用户名字段添加到当前表单；那不会形成可信用户身份。
-
-## 10. 修改 OAuth 核心时的安全不变量
-
-任何 OAuth 改动都必须保持：
-
-- 生产环境不能使用默认签名密钥。
-- 只接受已登记客户端和精确回调地址。
-- 只接受允许的 scope。
-- 只接受 Authorization Code 流程和 S256 PKCE。
-- 授权码短期有效、绑定客户端和回调地址、只能使用一次。
-- Token 校验 issuer、audience 和 `typ`。
-- MCP 路由要求明确 scope。
-- OAuth 和 Token 响应不缓存。
+- 生产环境拒绝短密钥和缺失 Blob 配置；
+- Client ID 与回调地址精确匹配；
+- 只允许 Authorization Code、Refresh Token 和 S256 PKCE；
+- 授权码短期有效且只能使用一次；
+- Refresh Token 单次使用并轮换；
+- Token 校验 issuer、audience、类型和 scope；
+- OAuth 响应不缓存；
 - 错误响应不泄露内部异常。
 
-不要为了本地调试重新添加静态 Bearer Token 或 `demo-*` 通配规则。
-
-## 11. 测试
-
-运行全部检查：
+## 验证
 
 ```bash
 npm test
 npm run check
 npm run build
-npm audit --omit=dev
 ```
 
-测试使用 Node.js 内置 `node:test`，不需要额外测试框架。现有测试覆盖：
-
-- 非法 scope 和回调地址
-- PKCE verifier
-- Blob 一次性消费
-- 非签名 Demo Token
-- 合法 Access Token
-- 授权码重复消费
-
-新增安全分支、解析器、循环或业务写操作时，至少增加一个会在逻辑回归时失败的测试。测试文件放在 `test/*.test.ts`。
-
-涉及真实 Blob 或完整 OAuth 跳转时，应另加部署后的集成测试；不要把生产 Blob Token 写入仓库。
-
-本地连接真实 Blob 时先执行：
-
-```bash
-vercel link
-vercel env pull .env.local
-```
-
-再向 `.env.local` 补充本地 `OAUTH_SECRET`。拉取命令会覆盖该文件，不要反过来执行。
-
-## 12. 提交前检查
-
-```bash
-git diff --check
-npm test
-npm run check
-npm run build
-npm audit --omit=dev
-```
-
-检查最终差异时重点确认：
-
-- `.env`、Token、口令和服务密钥没有进入 Git。
-- 没有新增认证绕过或默认生产凭据。
-- 新工具的参数和资源访问边界均被校验。
-- README、配置文档和元数据仍与实际实现一致。
+新增安全分支、解析逻辑或有副作用的工具时，至少增加一个能在回归时失败的测试。现有测试使用 Node.js 内置 `node:test`，不需要新增测试框架。

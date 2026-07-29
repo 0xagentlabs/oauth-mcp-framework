@@ -2,7 +2,6 @@ import {
   BlobNotFoundError,
   BlobPreconditionFailedError,
   del,
-  get,
   head,
   put,
 } from "@vercel/blob";
@@ -25,16 +24,6 @@ export async function createBlob(path: string, value: string): Promise<void> {
     await put(path, value, { ...options, contentType: "application/json" });
   } catch (error) {
     throw new BlobStorageError("write", error);
-  }
-}
-
-export async function readBlob(path: string): Promise<string | undefined> {
-  try {
-    const result = await get(path, { access: "private", useCache: false });
-    if (!result || result.statusCode !== 200) return undefined;
-    return new Response(result.stream).text();
-  } catch (error) {
-    throw new BlobStorageError("read", error);
   }
 }
 

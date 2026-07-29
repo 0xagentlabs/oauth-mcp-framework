@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BlobStorageError } from "@/lib/blob-store";
 import {
   createAuthCode,
+  GROK_REDIRECT_URI,
   ISSUER,
   validateClient,
   validateScope,
@@ -75,7 +76,7 @@ ${hidden}<button class="btn" type="submit">确认授权</button></form></body></
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
-        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; form-action ${new URL(ISSUER).origin}; frame-ancestors 'none'`,
+        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; form-action ${new URL(ISSUER).origin} ${new URL(GROK_REDIRECT_URI).origin}; frame-ancestors 'none'`,
         "X-Content-Type-Options": "nosniff",
       },
     });

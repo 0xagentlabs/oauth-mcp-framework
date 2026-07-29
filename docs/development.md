@@ -22,6 +22,7 @@ src/
 │   ├── api/[transport]/route.ts
 │   ├── oauth/
 │   │   ├── authorize/route.ts
+│   │   ├── register/route.ts
 │   │   └── token/route.ts
 │   ├── .well-known/
 │   │   ├── oauth-authorization-server/route.ts
@@ -41,7 +42,8 @@ src/
 - `lib/auth.ts`：将 Bearer Token 转换为 MCP `AuthInfo`。
 - `lib/oauth.ts`：客户端、scope、PKCE、JWT、授权码存储和限流。
 - `oauth/authorize`：校验授权请求并展示管理员授权表单。
-- `oauth/token`：校验并原子消费授权码，签发 Access Token。
+- `oauth/register`：仅接受 Grok 官方回调地址，幂等返回固定公共 Client ID。
+- `oauth/token`：校验并原子消费授权码或 Refresh Token，签发新 Token 对。
 - `.well-known`：OAuth 客户端自动发现所需元数据。
 
 ## 3. 请求调用链
@@ -58,7 +60,7 @@ src/
   → 客户端 POST /oauth/token
   → 校验客户端、JWT、PKCE
   → KV GETDEL 原子消费 jti
-  → 签发 1 小时 Access Token
+  → 签发 1 小时 Access Token + 30 天轮换 Refresh Token
 ```
 
 ### MCP

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   consumeAuthCode,
-  createAccessToken,
+  consumeRefreshToken,
+  createTokenPair,
   validateClient,
+  validateClientId,
   verifyAuthCode,
   verifyPkce,
+  verifyRefreshToken,
 } from "@/lib/oauth";
 
 const corsHeaders = {
@@ -18,10 +21,25 @@ export async function POST(req: NextRequest) {
     const body: Record<string, string> = contentType.includes("application/json")
       ? await req.json()
       : Object.fromEntries(new URLSearchParams(await req.text()));
-    const { grant_type, code, redirect_uri, client_id, code_verifier } = body;
+    const { grant_type, client_id } = body;
+    if (!client_id) {
+      return NextResponse.json({ error: "invalid_request" }, { status: 400, headers: corsHeaders });
+    }
+    if (grant_type === "refresh_token") {
+      validateClientId(client_id);
+      if (!body.refresh_token) throw new Error("invalid_grant");
+      const refresh = await verifyRefreshToken(body.refresh_token);
+      if (refresh.client_id !== client_id) throw new Error("invalid_grant");
+      await consumeRefreshToken(refresh.jti!);
+      return NextResponse.json(
+        await createTokenPair({ client_id, scope: refresh.scope, sub: refresh.sub }),
+        { headers: corsHeaders },
+      );
+    }
     if (grant_type !== "authorization_code") {
       return NextResponse.json({ error: "unsupported_grant_type" }, { status: 400, headers: corsHeaders });
     }
+    const { code, redirect_uri, code_verifier } = body;
     if (!code || !redirect_uri || !client_id || !code_verifier) {
       return NextResponse.json({ error: "invalid_request" }, { status: 400, headers: corsHeaders });
     }
@@ -33,7 +51,7 @@ export async function POST(req: NextRequest) {
     if (!await verifyPkce(code_verifier, authCode.code_challenge)) throw new Error("invalid_grant");
     await consumeAuthCode(authCode.jti!);
     return NextResponse.json(
-      await createAccessToken({ client_id, scope: authCode.scope }),
+      await createTokenPair({ client_id, scope: authCode.scope }),
       { headers: corsHeaders },
     );
   } catch {

@@ -19,15 +19,51 @@ function getIssuer() {
 
 export const ISSUER = getIssuer();
 export const RESOURCE = `${ISSUER}/api/mcp`;
-export const SCOPES = ["mcp:tools", "mcp:read", "mcp:write", "openid"];
+export const SCOPES = ["mcp:tools", "mcp:read", "mcp:write", "openid", "offline_access"];
 
 type OAuthClient = { client_id: string; redirect_uris: string[]; client_name?: string };
+
+export const GROK_REDIRECT_URI = "https://grok.com/connectors-oauth-exchange-code/";
 
 const GROK_CLIENT: OAuthClient = {
   client_id: "grok",
   client_name: "Grok",
-  redirect_uris: ["https://grok.com/connectors-oauth-exchange-code/"],
+  redirect_uris: [GROK_REDIRECT_URI],
 };
+
+export function registerGrokClient(metadata: {
+  redirect_uris?: unknown;
+  token_endpoint_auth_method?: unknown;
+  grant_types?: unknown;
+  response_types?: unknown;
+  client_name?: unknown;
+}) {
+  if (!Array.isArray(metadata.redirect_uris) ||
+      metadata.redirect_uris.length !== 1 ||
+      metadata.redirect_uris[0] !== GROK_REDIRECT_URI) {
+    throw new Error("invalid_redirect_uri");
+  }
+  if (metadata.token_endpoint_auth_method != null && metadata.token_endpoint_auth_method !== "none") {
+    throw new Error("invalid_client_metadata");
+  }
+  if (metadata.grant_types != null &&
+      (!Array.isArray(metadata.grant_types) || metadata.grant_types.some((value) => value !== "authorization_code" && value !== "refresh_token"))) {
+    throw new Error("invalid_client_metadata");
+  }
+  if (metadata.response_types != null &&
+      (!Array.isArray(metadata.response_types) || metadata.response_types.some((value) => value !== "code"))) {
+    throw new Error("invalid_client_metadata");
+  }
+  return {
+    client_id: GROK_CLIENT.client_id,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    client_name: typeof metadata.client_name === "string" ? metadata.client_name.slice(0, 100) : "Grok",
+    redirect_uris: GROK_CLIENT.redirect_uris,
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+  };
+}
 
 export async function redis(command: string[]): Promise<unknown> {
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -50,6 +86,10 @@ export async function validateClient(clientId: string, redirectUri: string): Pro
     throw new Error("invalid_client");
   }
   return GROK_CLIENT;
+}
+
+export function validateClientId(clientId: string): void {
+  if (clientId !== GROK_CLIENT.client_id) throw new Error("invalid_client");
 }
 
 export function validateScope(scope: string): string {
@@ -126,6 +166,40 @@ export async function createAccessToken(opts: { client_id: string; scope: string
     .setExpirationTime(`${expiresIn}s`)
     .sign(SECRET);
   return { access_token, expires_in: expiresIn, token_type: "Bearer", scope: opts.scope };
+}
+
+export async function createTokenPair(opts: { client_id: string; scope: string; sub?: string }) {
+  const access = await createAccessToken(opts);
+  const jti = crypto.randomUUID();
+  const refresh_token = await new SignJWT({
+    typ: "refresh_token",
+    client_id: opts.client_id,
+    scope: opts.scope,
+    sub: opts.sub || "resource-owner",
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(ISSUER)
+    .setAudience(RESOURCE)
+    .setJti(jti)
+    .setIssuedAt()
+    .setExpirationTime("30d")
+    .sign(SECRET);
+  if (await redis(["SET", `oauth:refresh:${jti}`, "1", "EX", "2592000", "NX"]) !== "OK") {
+    throw new Error("refresh_token_store_failed");
+  }
+  return { ...access, refresh_token };
+}
+
+export async function verifyRefreshToken(token: string): Promise<JWTPayload & {
+  client_id: string; scope: string; sub: string;
+}> {
+  const { payload } = await jwtVerify(token, SECRET, { issuer: ISSUER, audience: RESOURCE });
+  if (payload.typ !== "refresh_token" || !payload.jti) throw new Error("invalid_grant");
+  return payload as JWTPayload & { client_id: string; scope: string; sub: string };
+}
+
+export async function consumeRefreshToken(jti: string): Promise<void> {
+  if (await redis(["GETDEL", `oauth:refresh:${jti}`]) !== "1") throw new Error("invalid_grant");
 }
 
 export async function verifyAccessToken(token: string) {

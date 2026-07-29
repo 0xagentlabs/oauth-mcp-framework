@@ -40,7 +40,7 @@ const handler = createMcpHandler(
 const authHandler = withMcpAuth(handler, verifyToken, {
   required: true,
   requiredScopes: ["mcp:tools"],
-  resourceMetadataPath: "/.well-known/oauth-protected-resource",
+  resourceMetadataPath: "/.well-known/oauth-protected-resource/api/mcp",
 });
 
 export { authHandler as GET, authHandler as POST, authHandler as DELETE };

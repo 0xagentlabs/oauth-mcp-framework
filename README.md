@@ -6,6 +6,7 @@ Minimal MCP server for a single-owner production deployment, using OAuth authori
 
 - [配置与部署文档](docs/configuration.md)
 - [二次开发文档](docs/development.md)
+- [Grok 自动 OAuth MCP 接入指南](docs/grok-auto-oauth.md)
 
 ## Security model
 
@@ -13,7 +14,8 @@ Minimal MCP server for a single-owner production deployment, using OAuth authori
 - The built-in `grok` client uses Grok's fixed callback URL.
 - The resource owner approves connections with `OAUTH_AUTHORIZATION_PASSWORD`.
 - Authorization codes expire after five minutes and are consumed atomically in Redis-compatible KV.
-- The OAuth client ID is fixed to `grok`; dynamic client registration is not exposed.
+- Access tokens expire after one hour; rotating refresh tokens keep the connection active for up to 30 days.
+- Grok obtains the fixed public Client ID automatically through a restricted Dynamic Client Registration endpoint.
 
 This is a single-owner authorization server. Use an external identity provider instead if you need multiple users, SSO, account recovery, MFA, or per-user consent.
 
@@ -69,6 +71,7 @@ See [配置与部署文档](docs/configuration.md) for minimal and advanced conf
 | MCP | `/api/mcp` |
 | Authorization | `/oauth/authorize` |
 | Token | `/oauth/token` |
+| Dynamic client registration | `/oauth/register` |
 | Authorization server metadata | `/.well-known/oauth-authorization-server` |
 | Protected resource metadata | `/.well-known/oauth-protected-resource` |
 

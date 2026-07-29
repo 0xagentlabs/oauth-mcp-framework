@@ -20,6 +20,21 @@ test("rejects unknown scopes and redirect URIs", async () => {
   );
 });
 
+test("dynamic registration only accepts the Grok callback", () => {
+  assert.throws(
+    () => oauth.registerGrokClient({ redirect_uris: ["https://attacker.example/callback"] }),
+    /invalid_redirect_uri/,
+  );
+  const client = oauth.registerGrokClient({
+    redirect_uris: ["https://grok.com/connectors-oauth-exchange-code/"],
+    token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+  });
+  assert.equal(client.client_id, "grok");
+  assert.equal(client.token_endpoint_auth_method, "none");
+});
+
 test("requires a valid S256 verifier", async () => {
   const verifier = "a".repeat(43);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
@@ -81,6 +96,31 @@ test("authorization code is consumed exactly once", async () => {
     const payload = await oauth.verifyAuthCode(code);
     await oauth.consumeAuthCode(payload.jti!);
     await assert.rejects(oauth.consumeAuthCode(payload.jti!), /authorization_code_used/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("refresh tokens rotate and cannot be replayed", async () => {
+  const values = new Map<string, string>();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const [command, key, value] = JSON.parse(String(init?.body)) as string[];
+    let result: unknown = null;
+    if (command === "SET" && !values.has(key)) {
+      values.set(key, value);
+      result = "OK";
+    } else if (command === "GETDEL") {
+      result = values.get(key) ?? null;
+      values.delete(key);
+    }
+    return Response.json({ result });
+  };
+  try {
+    const pair = await oauth.createTokenPair({ client_id: "grok", scope: "mcp:tools offline_access" });
+    const refresh = await oauth.verifyRefreshToken(pair.refresh_token);
+    await oauth.consumeRefreshToken(refresh.jti!);
+    await assert.rejects(oauth.consumeRefreshToken(refresh.jti!), /invalid_grant/);
   } finally {
     globalThis.fetch = originalFetch;
   }

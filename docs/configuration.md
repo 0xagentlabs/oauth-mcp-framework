@@ -8,9 +8,10 @@
 
 - 管理员使用统一授权口令批准连接。
 - MCP 客户端使用 OAuth Authorization Code + S256 PKCE 获取 Access Token。
-- OAuth 客户端固定为 `grok`，并内置 Grok 官方回调地址。
+- OAuth 客户端固定为 `grok`，并通过受限的动态注册端点自动返回给 Grok。
 - 授权码有效期为 5 分钟，只能兑换一次。
 - Access Token 有效期为 1 小时。
+- Refresh Token 有效期为 30 天，每次刷新都会轮换且旧 Token 立即失效。
 - 授权口令连续尝试限制为每个来源地址 10 分钟内 10 次。
 
 如果需要多用户、SSO、MFA、账户恢复或按用户授权，应接入外部身份提供商，而不是继续扩展统一口令模式。
@@ -109,7 +110,7 @@ openssl rand -base64 48
 
 ### Grok 客户端
 
-项目内置且只支持固定 OAuth 公共客户端和回调地址：
+项目内置且只支持固定 OAuth 公共客户端和回调地址。Grok 会通过 `/oauth/register` 自动取得该 Client ID，不需要用户手填：
 
 ```json
 {
@@ -291,4 +292,4 @@ MCP 入口当前只强制要求 `mcp:tools`。
 - 为生产、预发布和开发环境使用不同的 OAuth 密钥、授权口令和 KV。
 - 在部署平台开启 HTTPS、访问日志和错误告警。
 - 轮换 `OAUTH_SECRET` 前应接受现有 Token 全部失效。
-- 如需停止新授权，可移除或轮换 `OAUTH_AUTHORIZATION_PASSWORD`；已经签发的 Token 会持续有效到最多 1 小时。
+- 如需停止新授权，可移除或轮换 `OAUTH_AUTHORIZATION_PASSWORD`。如需同时让已有 Access Token 和 Refresh Token 失效，应轮换 `OAUTH_SECRET`。

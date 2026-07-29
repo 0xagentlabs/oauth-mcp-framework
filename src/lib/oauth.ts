@@ -2,9 +2,17 @@ import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 
 const isProduction = process.env.NODE_ENV === "production";
 const secretValue = process.env.OAUTH_SECRET;
+const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 if (isProduction && (!secretValue || secretValue.length < 32)) {
   throw new Error("OAUTH_SECRET must be at least 32 characters in production");
+}
+if (isProduction && (!redisUrl || !redisToken)) {
+  throw new Error(
+    "Redis storage is required in production: configure KV_REST_API_URL + KV_REST_API_TOKEN " +
+    "or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN"
+  );
 }
 
 const SECRET = new TextEncoder().encode(secretValue || "local-development-secret-change-me");
@@ -66,12 +74,10 @@ export function registerGrokClient(metadata: {
 }
 
 export async function redis(command: string[]): Promise<unknown> {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) throw new Error("Redis REST URL and token are required");
-  const response = await fetch(url, {
+  if (!redisUrl || !redisToken) throw new Error("Redis REST URL and token are required");
+  const response = await fetch(redisUrl, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${redisToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(command),
     cache: "no-store",
   });

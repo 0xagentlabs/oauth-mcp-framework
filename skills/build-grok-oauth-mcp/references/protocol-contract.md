@@ -198,6 +198,10 @@ MCP_RESOURCE_URL=https://mcp.example.com
 
 Do not add `OAUTH_AUTHORIZATION_PASSWORD` in public mode.
 
+Production startup must reject missing or half-configured Redis credentials. On Vercel, verify
+the actual project environment after connecting storage; do not assume Marketplace integration
+variables exist.
+
 ## Verification commands
 
 Challenge:
@@ -223,6 +227,15 @@ curl -fsS -X POST \
 ```
 
 Also send an attacker callback and require a 400 error.
+
+Deployment preflight:
+
+```bash
+vercel env ls production
+```
+
+Require one complete Redis pair in the output. Then complete browser authorization; fetching
+metadata alone does not exercise the first Redis write.
 
 ## Notion comparison
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 process.env.OAUTH_SECRET = "test-secret-that-is-longer-than-32-characters";
@@ -6,6 +7,27 @@ process.env.KV_REST_API_URL = "https://kv.example";
 process.env.KV_REST_API_TOKEN = "test-token";
 
 const oauth = await import("../src/lib/oauth.ts");
+
+test("production startup rejects missing Redis configuration", () => {
+  const moduleUrl = new URL("../src/lib/oauth.ts", import.meta.url).href;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "production",
+    OAUTH_SECRET: "x".repeat(32),
+  };
+  delete env.KV_REST_API_URL;
+  delete env.KV_REST_API_TOKEN;
+  delete env.UPSTASH_REDIS_REST_URL;
+  delete env.UPSTASH_REDIS_REST_TOKEN;
+  const result = spawnSync(process.execPath, [
+    "--experimental-strip-types",
+    "--input-type=module",
+    "--eval",
+    `await import(${JSON.stringify(moduleUrl)})`,
+  ], { env, encoding: "utf8" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Redis storage is required in production/);
+});
 
 test("rejects unknown scopes and redirect URIs", async () => {
   assert.throws(() => oauth.validateScope("mcp:tools admin"), /invalid_scope/);

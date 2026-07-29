@@ -59,6 +59,8 @@ Read [references/protocol-contract.md](references/protocol-contract.md) before c
    - Infer the public origin from Vercel when available.
    - Require only a strong OAuth signing secret as a manual secret for public mode.
    - Support both Vercel KV (`KV_REST_API_*`) and native Upstash (`UPSTASH_REDIS_REST_*`) variable names.
+   - Fail production startup/build with a clear error when neither complete Redis pair exists.
+   - Inspect the actual deployment environment variable names; documentation is not proof that storage is connected.
    - Keep custom resource URL configuration optional for custom domains or non-Vercel hosts.
 
 8. Verify in protocol order.
@@ -69,6 +71,7 @@ Read [references/protocol-contract.md](references/protocol-contract.md) before c
    - POST a realistic Grok DCR payload and confirm the returned Client ID.
    - Exercise authorization-code exchange, Refresh Token rotation, and replay rejection.
    - Test the deployed Grok authorization URL after deployment.
+   - Complete browser confirmation and verify that authorization-code storage succeeds in the deployed environment.
 
 ## Required Proof
 
@@ -81,6 +84,8 @@ Do not call the work complete until evidence shows:
 - browser authorization uses S256 PKCE;
 - authorization codes and Refresh Tokens reject replay;
 - a production build succeeds without a callback or authorization-password environment variable;
+- a production build fails clearly when Redis storage variables are absent;
+- the deployed environment contains one complete Redis variable pair;
 - Grok no longer asks the user to type Client ID or Client Secret.
 
 If the last check still shows a credential form, compare live metadata with Notion MCP and confirm that the deployment—not only the local checkout—contains the registration endpoint. Delete and recreate the Grok Connector after deployment to clear cached configuration.
